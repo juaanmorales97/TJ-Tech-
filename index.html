@@ -3,33 +3,42 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GestorPro — Panel de control</title>
+<title>TJ Tech — Panel de control</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #f8f8f6;
-    --bg2: #ffffff;
-    --bg3: #f0efe9;
-    --border: #e2e1db;
-    --border2: #d0cfc8;
-    --text: #1a1a18;
-    --text2: #6b6a64;
-    --text3: #9b9a94;
-    --green: #16a34a;
-    --green-bg: #f0fdf4;
+    /* TJ Tech brand */
+    --brand:        #2B7070;
+    --brand-dark:   #1d5454;
+    --brand-light:  #45CECE;
+    --brand-bg:     #eaf5f5;
+    --brand-border: #b2dede;
+
+    --bg:     #f4f6f6;
+    --bg2:    #ffffff;
+    --bg3:    #eaf5f5;
+    --border: #dde8e8;
+    --border2:#c5d8d8;
+    --text:   #0f2424;
+    --text2:  #4a6666;
+    --text3:  #82a0a0;
+
+    --green:        #16a34a;
+    --green-bg:     #f0fdf4;
     --green-border: #bbf7d0;
-    --amber: #d97706;
-    --amber-bg: #fffbeb;
+    --amber:        #d97706;
+    --amber-bg:     #fffbeb;
     --amber-border: #fde68a;
-    --red: #dc2626;
-    --red-bg: #fef2f2;
-    --red-border: #fecaca;
-    --blue: #2563eb;
-    --blue-bg: #eff6ff;
-    --blue-border: #bfdbfe;
+    --red:          #dc2626;
+    --red-bg:       #fef2f2;
+    --red-border:   #fecaca;
+    --blue:         #2B7070;
+    --blue-bg:      #eaf5f5;
+    --blue-border:  #b2dede;
+
     --radius: 10px;
     --radius-sm: 6px;
     --font-mono: 'JetBrains Mono', monospace;
@@ -50,9 +59,9 @@
   .app { display: flex; min-height: 100vh; }
 
   .sidebar {
-    width: 220px;
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
+    width: 225px;
+    background: var(--brand);
+    border-right: none;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -61,19 +70,25 @@
   }
 
   .sidebar-logo {
-    padding: 1.25rem 1.25rem 1rem;
-    border-bottom: 1px solid var(--border);
+    padding: 1.4rem 1.25rem 1.2rem;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
-  .sidebar-logo .name {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: -.3px;
+  .logo-text .name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -.2px;
+    line-height: 1.1;
   }
-  .sidebar-logo .sub {
-    font-size: 11px;
-    color: var(--text3);
-    margin-top: 1px;
+  .logo-text .sub {
+    font-size: 10px;
+    color: rgba(255,255,255,.5);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-top: 2px;
   }
 
   nav { padding: .75rem; flex: 1; overflow-y: auto; }
@@ -81,37 +96,34 @@
   .nav-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 9px 11px;
     border: none;
     background: transparent;
     cursor: pointer;
     font-size: 13px;
     font-family: inherit;
-    color: var(--text2);
+    color: rgba(255,255,255,.62);
     border-radius: var(--radius-sm);
     text-align: left;
     transition: background .12s, color .12s;
-    margin-bottom: 1px;
+    margin-bottom: 2px;
   }
-  .nav-btn:hover { background: var(--bg3); color: var(--text); }
-  .nav-btn.active {
-    background: var(--green-bg);
-    color: var(--green);
-    font-weight: 500;
-  }
-  .nav-icon { width: 16px; text-align: center; font-size: 14px; flex-shrink: 0; }
+  .nav-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .nav-btn.active { background: rgba(255,255,255,.18); color: #fff; font-weight: 600; }
+  .nav-btn.active .nav-icon { color: var(--brand-light); }
+  .nav-icon { width: 16px; text-align: center; font-size: 14px; flex-shrink: 0; color: rgba(255,255,255,.45); }
 
   .sidebar-footer {
     padding: .75rem 1rem;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid rgba(255,255,255,.1);
     font-size: 11px;
-    color: var(--text3);
+    color: rgba(255,255,255,.3);
   }
 
   .main {
-    margin-left: 220px;
+    margin-left: 225px;
     flex: 1;
     padding: 2rem 2rem 4rem;
     max-width: 1100px;
@@ -139,7 +151,7 @@
   .metric-value.green { color: var(--green); }
   .metric-value.amber { color: var(--amber); }
   .metric-value.red { color: var(--red); }
-  .metric-value.blue { color: var(--blue); }
+  .metric-value.blue { color: var(--brand); }
 
   /* ─── PAGE HEADER ─── */
   .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
@@ -161,11 +173,11 @@
   }
   .btn:hover { background: var(--bg3); border-color: var(--border2); }
   .btn-primary {
-    background: var(--text);
+    background: var(--brand);
     color: #fff;
-    border-color: var(--text);
+    border-color: var(--brand);
   }
-  .btn-primary:hover { background: #333; }
+  .btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
   .btn-danger { color: var(--red); border-color: var(--red-border); }
   .btn-danger:hover { background: var(--red-bg); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -178,7 +190,7 @@
     font-family: inherit; cursor: pointer;
     transition: all .12s;
   }
-  .btn-seg.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 500; }
+  .btn-seg.active { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 500; }
 
   /* ─── TABLE ─── */
   .tbl-wrap { overflow-x: auto; }
@@ -249,8 +261,8 @@
   }
   .field input:focus, .field select:focus, .field textarea:focus {
     outline: none;
-    border-color: var(--blue);
-    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(43,112,112,.15);
   }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .span2 { grid-column: span 2; }
@@ -307,8 +319,16 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="name">GestorPro</div>
-      <div class="sub">Panel de control</div>
+      <!-- Logo TJ Tech recreado en SVG -->
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="22" cy="22" r="20" stroke="white" stroke-width="2.5" fill="none" opacity=".9"/>
+        <text x="22" y="17" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="11" fill="white" letter-spacing="-.5">TJ</text>
+        <text x="22" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="8.5" fill="#45CECE" letter-spacing="1.5">TECH</text>
+      </svg>
+      <div class="logo-text">
+        <div class="name">TJ Tech</div>
+        <div class="sub">Panel de control</div>
+      </div>
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-footer">Datos guardados localmente</div>
@@ -334,8 +354,8 @@ const CATS = ['Flete/Envío','Alquiler','Servicios','Personal','Marketing','Impu
 const UNIS = ['unidad','kg','litro','caja','pack','metro','par','bolsa'];
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos'};
-let DB = {p:[], l:[], v:[], g:[]};
+const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos', u:'gp_usd'};
+let DB = {p:[], l:[], v:[], g:[], u:[]};
 
 function dbLoad() {
   for (const [k, sk] of Object.entries(SK)) {
@@ -357,7 +377,7 @@ function stockProd(prod) {
 }
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
-let view = 'dashboard', rPer = 'mes', chart = null;
+let view = 'dashboard', rPer = '6m', chart = null;
 let lF = {}, lI = [], vF = {}, vI = [];
 
 const NAVS = [
@@ -366,6 +386,7 @@ const NAVS = [
   {id:'l',         icon:'⊞', l:'Compras / Lotes'},
   {id:'v',         icon:'◎', l:'Ventas'},
   {id:'g',         icon:'◇', l:'Gastos'},
+  {id:'usd',       icon:'$', l:'Movimientos USD'},
   {id:'caja',      icon:'⇌', l:'Flujo de caja'},
   {id:'res',       icon:'≡', l:'Resultados'},
 ];
@@ -382,7 +403,7 @@ function go(v2) { view = v2; rnav(); rview(); }
 
 function rview() {
   if (chart) { chart.destroy(); chart = null; }
-  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, caja:vCaja, res:vRes};
+  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, usd:vUsd, caja:vCaja, res:vRes};
   document.getElementById('main').innerHTML = (mp[view] || vDash)();
   if (view === 'dashboard') setTimeout(iChart, 50);
 }
@@ -441,7 +462,7 @@ function iChart() {
     data: {
       labels: md.map(x=>x.mes),
       datasets: [
-        {label:'Ingresos', data:md.map(x=>x.ing), backgroundColor:'rgba(22,163,74,.75)', borderRadius:5, borderSkipped:false},
+        {label:'Ingresos', data:md.map(x=>x.ing), backgroundColor:'rgba(43,112,112,.8)', borderRadius:5, borderSkipped:false},
         {label:'Egresos',  data:md.map(x=>x.eg),  backgroundColor:'rgba(217,119,6,.75)',  borderRadius:5, borderSkipped:false},
       ]
     },
@@ -800,68 +821,310 @@ function vCaja() {
 }
 
 // ─── RESULTADOS ───────────────────────────────────────────────────────────────
+// Categorías que van ANTES de Utilidad antes de impuestos
+const CATS_OP = ['Flete/Envío','Alquiler','Servicios','Personal','Marketing','Materiales','Varios'];
+// Impuestos va separado, después de la utilidad operativa
+
+function resMonthData(y, m) {
+  const aps = DB.p.map(p=>({...p,...stockProd(p)}));
+  const fv = DB.v.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
+  const fg = DB.g.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
+
+  const ventas = fv.reduce((s,v)=>s+v.total,0);
+  const cmv    = fv.flatMap(v=>v.items||[]).reduce((s,it)=>{
+    const p=aps.find(x=>x.id===it.pid); return s+it.qty*(p?.cp||0);
+  },0);
+  const utilBruta = ventas - cmv;
+
+  const gastosCat = {};
+  CATS.forEach(cat=>{
+    gastosCat[cat]=fg.filter(g=>g.categoria===cat).reduce((s,g)=>s+g.monto,0);
+  });
+  const gastoOp   = CATS_OP.reduce((s,c)=>s+(gastosCat[c]||0),0);
+  const impuestos = gastosCat['Impuestos']||0;
+  const utilAntesImp = utilBruta - gastoOp;
+  const utilNeta     = utilAntesImp - impuestos;
+  const pctUV  = ventas>0 ? utilNeta/ventas*100   : null;
+  const margen = ventas>0 ? utilBruta/ventas*100  : null;
+  const facMin = margen   ? gastoOp/(margen/100)  : null;
+
+  return {ventas,cmv,utilBruta,gastosCat,gastoOp,impuestos,utilAntesImp,utilNeta,pctUV,margen,facMin};
+}
+
 function vRes() {
   const now = new Date();
-  function flt(arr, dk) {
-    if (rPer==='mes')  return arr.filter(x=>{const d=new Date(x[dk]);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
-    if (rPer==='anio') return arr.filter(x=>new Date(x[dk]).getFullYear()===now.getFullYear());
-    return arr;
-  }
-  const fv = flt(DB.v,'fecha'), fg = flt(DB.g,'fecha');
-  const ing  = fv.reduce((s,v)=>s+v.total,0);
-  const aps  = DB.p.map(p=>({...p,...stockProd(p)}));
-  const cmv  = fv.flatMap(v=>v.items||[]).reduce((s,it)=>{const p=aps.find(x=>x.id===it.pid);return s+it.qty*(p?.cp||0);},0);
-  const mb   = ing - cmv;
-  const gop  = fg.reduce((s,g)=>s+g.monto,0);
-  const neto = mb - gop;
-  const pct  = (n,d) => d>0 ? (n/d*100).toFixed(1)+'%' : '—';
 
-  const catRows = CATS.map(cat => {
-    const t = fg.filter(g=>g.categoria===cat).reduce((s,g)=>s+g.monto,0);
-    if (!t) return '';
-    return `<div style="display:flex;justify-content:space-between;padding:5px 0 5px 1.25rem">
-      <span style="font-size:12px;color:var(--text2)">${cat}</span>
-      <span class="mono" style="font-size:12px;color:var(--text2)">${ARS(t)}</span>
-    </div>`;
-  }).join('');
-
-  function rrow(l, v, c) {
-    return `<div class="res-row">
-      <span class="label">${l}</span>
-      <div><span class="val" style="color:${c}">${ARS(v)}</span><span class="pct">${pct(v,ing)}</span></div>
-    </div>`;
+  // Construir lista de meses según el período seleccionado
+  let months = [];
+  if (rPer==='anio') {
+    for(let m=0;m<=now.getMonth();m++) months.push({y:now.getFullYear(),m});
+  } else if (rPer==='6m') {
+    for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth()});}
+  } else {
+    for(let i=2;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth()});}
   }
 
-  const lbl = {mes:'Mes actual', anio:'Año actual', total:'Acumulado total'}[rPer];
+  const mData  = months.map(({y,m})=>resMonthData(y,m));
+  const labels = months.map(({y,m})=>`${MN[m]}-${String(y).slice(2)}`);
+
+  // Columna TOTAL
+  const tot = {
+    ventas:       mData.reduce((s,d)=>s+d.ventas,0),
+    cmv:          mData.reduce((s,d)=>s+d.cmv,0),
+    utilBruta:    mData.reduce((s,d)=>s+d.utilBruta,0),
+    gastosCat:    {},
+    gastoOp:      mData.reduce((s,d)=>s+d.gastoOp,0),
+    impuestos:    mData.reduce((s,d)=>s+d.impuestos,0),
+    utilAntesImp: mData.reduce((s,d)=>s+d.utilAntesImp,0),
+    utilNeta:     mData.reduce((s,d)=>s+d.utilNeta,0),
+  };
+  CATS.forEach(cat=>{ tot.gastosCat[cat]=mData.reduce((s,d)=>s+(d.gastosCat[cat]||0),0); });
+  tot.pctUV  = tot.ventas>0 ? tot.utilNeta/tot.ventas*100  : null;
+  tot.margen = tot.ventas>0 ? tot.utilBruta/tot.ventas*100 : null;
+  tot.facMin = tot.margen   ? tot.gastoOp/(tot.margen/100) : null;
+
+  const cols   = [...mData, tot];
+  const allLbl = [...labels, 'Total'];
+  const nCols  = cols.length;
+
+  // ── helpers de celda ──
+  const dash = `<span style="color:var(--text3)">—</span>`;
+
+  function cARS(v, opts={}) {
+    if(v===null||v===undefined||v===0) return dash;
+    const neg = opts.neg && v>0;   // mostrar entre paréntesis
+    const color = opts.color||(neg?'var(--red)':v<0?'var(--red)':'');
+    const txt = neg ? `(${ARS(Math.abs(v))})` : ARS(Math.abs(v));
+    return `<span class="mono" style="font-size:12px${color?`;color:${color}`:''}${v<0&&!neg?';color:var(--red)':''}${opts.bold?';font-weight:700':''}">${v<0&&!neg?`(${ARS(Math.abs(v))})`:txt}</span>`;
+  }
+  function cPct(v, opts={}) {
+    if(v===null||v===undefined) return dash;
+    const color = v>0?'var(--green)':v<0?'var(--red)':'var(--text3)';
+    return `<span class="mono" style="font-size:12px;color:${color}${opts.bold?';font-weight:700':''}">${v.toFixed(0)}%</span>`;
+  }
+
+  // ── constructores de fila ──
+  const isLast = i => i===nCols-1;
+
+  function rowHeader(label) {
+    return `<tr>
+      <td colspan="${nCols+1}" style="background:var(--brand);color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:7px 14px">${label}</td>
+    </tr>`;
+  }
+
+  function rowSep() {
+    return `<tr><td colspan="${nCols+1}" style="padding:0;height:1px;background:var(--border)"></td></tr>`;
+  }
+
+  function row(label, getter, opts={}) {
+    const tds = cols.map((d,i)=>{
+      const v=getter(d);
+      const base=`padding:8px 12px;text-align:right;${isLast(i)?'border-left:2px solid var(--border);background:var(--bg3)':''}`;
+      const cell = opts.pct ? cPct(v,{bold:isLast(i)||opts.bold}) : cARS(v,{...opts,bold:isLast(i)||opts.bold});
+      return `<td style="${base}">${cell}</td>`;
+    }).join('');
+    const lStyle=`padding:8px 14px;font-size:${opts.indent?'12':'13'}px;${opts.indent?'color:var(--text2);padding-left:28px':''}${opts.bold?';font-weight:700':''}${opts.subtotal?';font-weight:600;background:var(--bg3)':''}`;
+    return `<tr style="${opts.subtotal?'border-top:2px solid var(--border)':''}">
+      <td style="${lStyle}">${label}</td>${tds}
+    </tr>`;
+  }
+
+  // ── encabezado de columnas ──
+  const thCols = allLbl.map((l,i)=>`<th style="text-align:right;padding:10px 12px;${isLast(i)?'border-left:2px solid var(--border);background:var(--bg3)':''}">${l}</th>`).join('');
 
   return `
     <div class="page-header">
-      <div><div class="page-title">Estado de resultados</div><div class="page-sub">${lbl}</div></div>
+      <div><div class="page-title">Estado de resultados</div><div class="page-sub">Comparativa mensual — datos de Ventas, Lotes y Gastos</div></div>
       <div style="display:flex;gap:6px">
-        ${[{v:'mes',l:'Este mes'},{v:'anio',l:'Este año'},{v:'total',l:'Total'}].map(o=>
+        ${[{v:'3m',l:'3 meses'},{v:'6m',l:'6 meses'},{v:'anio',l:'Año actual'}].map(o=>
           `<button class="btn-seg${rPer===o.v?' active':''}" onclick="rPer='${o.v}';rview()">${o.l}</button>`
         ).join('')}
       </div>
     </div>
-    <div class="card" style="max-width:580px">
-      <div style="padding:1.25rem">
-        ${rrow('Ventas totales', ing, 'var(--green)')}
-        ${rrow('Costo de mercadería vendida (CMV)', cmv, 'var(--amber)')}
-        <div class="res-row" style="border-top:2px solid var(--border)">
-          <span class="label" style="font-weight:600">Margen bruto</span>
-          <div><span class="val" style="font-size:16px;color:${mb>=0?'var(--green)':'var(--red)'}">${ARS(mb)}</span><span class="pct">${pct(mb,ing)}</span></div>
-        </div>
-        ${rrow('Gastos operativos', gop, 'var(--amber)')}
-        ${catRows}
-        <div class="res-total ${neto>=0?'pos':'neg'}">
-          <span class="label">Resultado neto</span>
-          <div><span class="val">${ARS(neto)}</span><span style="font-size:12px;margin-left:8px">${pct(neto,ing)}</span></div>
-        </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table style="table-layout:auto">
+          <thead>
+            <tr style="background:var(--brand-dark)">
+              <th style="padding:10px 14px;color:#fff;font-size:11px;text-align:left;min-width:190px">Estado de Resultados</th>
+              ${allLbl.map((l,i)=>`<th style="text-align:right;padding:10px 12px;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;${isLast(i)?'border-left:2px solid rgba(255,255,255,.3)':''}">${l}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${row('Ventas',              d=>d.ventas,        {bold:false})}
+            ${row('CMV',                 d=>d.cmv,           {neg:true})}
+            ${rowSep()}
+            ${row('Utilidad Bruta',      d=>d.utilBruta,     {bold:true, subtotal:true})}
+            ${rowSep()}
+            ${CATS_OP.map(cat=>row(cat, d=>d.gastosCat[cat]||0, {indent:true,neg:true})).join('')}
+            ${rowSep()}
+            ${row('Subtotal Gastos Op.', d=>d.gastoOp,       {neg:true, bold:true, subtotal:true})}
+            ${rowSep()}
+            ${row('Utilidad antes de impuestos', d=>d.utilAntesImp, {bold:true, subtotal:true})}
+            ${row('Impuestos',           d=>d.impuestos,     {indent:true, neg:true})}
+            ${rowSep()}
+            ${row('Utilidad Neta',       d=>d.utilNeta,      {bold:true, subtotal:true})}
+            ${row('Utilidad / Ventas',   d=>d.pctUV,         {pct:true})}
+            ${rowHeader('Punto de equilibrio')}
+            ${row('Margen bruto %',      d=>d.margen,        {pct:true})}
+            ${row('Facturación mínima necesaria', d=>d.facMin, {bold:false})}
+          </tbody>
+        </table>
       </div>
     </div>`;
 }
 
-// ─── MODAL ────────────────────────────────────────────────────────────────────
+// ─── MOVIMIENTOS USD ──────────────────────────────────────────────────────────
+const USD_TIPOS = ['Compra USD','Venta USD','Entrada (cobro)','Salida (pago)','Transferencia interna'];
+const USD_UBIC  = ['Cash — en mano','Banco — cuenta propia','Banco — cuenta tercero','Caja fuerte','Billetera digital'];
+
+function fmtUSD(n) {
+  return new Intl.NumberFormat('es-AR', {style:'currency', currency:'USD', maximumFractionDigits:2}).format(n||0);
+}
+
+function saldoUSD() {
+  return DB.u.reduce((s,m) => {
+    const es = ['Compra USD','Entrada (cobro)'];
+    return es.includes(m.tipo) ? s + m.montoUsd : s - m.montoUsd;
+  }, 0);
+}
+
+function vUsd() {
+  const saldo = saldoUSD();
+  // resumen por ubicación
+  const porUbic = {};
+  DB.u.forEach(m => {
+    const es = ['Compra USD','Entrada (cobro)'];
+    const delta = es.includes(m.tipo) ? m.montoUsd : -m.montoUsd;
+    const ub = m.ubicacion || 'Sin especificar';
+    porUbic[ub] = (porUbic[ub] || 0) + delta;
+  });
+  const ubicCards = Object.entries(porUbic).map(([k,v]) => `
+    <div class="metric">
+      <div class="metric-label" style="font-size:10px">${k}</div>
+      <div class="metric-value ${v>=0?'blue':'red'}" style="font-size:18px">${fmtUSD(v)}</div>
+    </div>`).join('');
+
+  const rows = [...DB.u].reverse().map(m => {
+    const esEntrada = ['Compra USD','Entrada (cobro)'].includes(m.tipo);
+    return `<tr>
+      <td>${fmtD(m.fecha)}</td>
+      <td><span class="badge badge-${esEntrada?'blue':'amber'}">${m.tipo}</span></td>
+      <td class="mono" style="font-weight:600;color:${esEntrada?'var(--brand)':'var(--amber)'}">${esEntrada?'+':'-'}${fmtUSD(m.montoUsd)}</td>
+      <td class="mono">${m.tipoCambio ? '$'+Number(m.tipoCambio).toLocaleString('es-AR') : '—'}</td>
+      <td class="mono" style="color:var(--text2);font-size:12px">${m.tipoCambio ? ARS(m.montoUsd * m.tipoCambio) : '—'}</td>
+      <td><span class="badge badge-blue" style="font-size:10px">${m.ubicacion||'—'}</span></td>
+      <td style="font-size:12px;color:var(--text2)">${m.responsable||'—'}</td>
+      <td style="font-size:12px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.comentario||''}">${m.comentario||'—'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="oEditU('${m.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="dUsd('${m.id}')">Eliminar</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Movimientos USD</div><div class="page-sub">Compra, venta y flujo de dólares</div></div>
+      <button class="btn btn-primary" onclick="oNewU()">+ Nuevo movimiento</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr repeat(${Math.min(Object.keys(porUbic).length,3)+1},auto);gap:12px;margin-bottom:1.5rem;align-items:start">
+      <div class="metric">
+        <div class="metric-label">Saldo total USD</div>
+        <div class="metric-value ${saldo>=0?'blue':'red'}">${fmtUSD(saldo)}</div>
+      </div>
+      ${ubicCards}
+    </div>
+
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Fecha</th><th>Tipo</th><th>Monto USD</th><th>Tipo de cambio</th>
+            <th>Equiv. ARS</th><th>Ubicación</th><th>Responsable</th><th>Comentario</th><th></th>
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="9"><div class="empty"><div class="empty-icon">$</div><div class="empty-text">Sin movimientos USD registrados</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function uBody(x) {
+  x = x || {};
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="u-f" value="${x.fecha||hoy()}">
+      </div>
+      <div class="field"><label>Tipo de movimiento</label>
+        <select id="u-t" onchange="uTipoChange()">
+          ${USD_TIPOS.map(t=>`<option${x.tipo===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Monto (USD)</label>
+        <input type="number" id="u-m" value="${x.montoUsd||''}" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="field"><label>Tipo de cambio ($ por USD)</label>
+        <input type="number" id="u-tc" value="${x.tipoCambio||''}" min="0" placeholder="Ej: 1200">
+      </div>
+      <div class="field" id="u-equiv-wrap"><label>Equivalente ARS</label>
+        <input type="text" id="u-equiv" readonly style="background:var(--bg3);color:var(--text2)" placeholder="Se calcula solo">
+      </div>
+      <div class="field"><label>Ubicación / dónde está</label>
+        <select id="u-u">
+          ${USD_UBIC.map(u=>`<option${x.ubicacion===u?' selected':''}>${u}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field span2"><label>Responsable / quién lo tiene</label>
+        <input id="u-r" value="${x.responsable||''}" placeholder="Nombre de la persona o entidad">
+      </div>
+      <div class="field span2"><label>Comentario</label>
+        <input id="u-c" value="${x.comentario||''}" placeholder="Ej: cobro factura #123, compra para reserva, etc.">
+      </div>
+    </div>`;
+}
+
+function uTipoChange() {
+  const m = +document.getElementById('u-m').value || 0;
+  const tc = +document.getElementById('u-tc').value || 0;
+  const eq = document.getElementById('u-equiv');
+  if (eq && m && tc) eq.value = ARS(m * tc); else if (eq) eq.value = '';
+}
+
+// recalcular equiv al cambiar monto o TC
+document.addEventListener('input', e => {
+  if (['u-m','u-tc'].includes(e.target.id)) uTipoChange();
+});
+
+function oNewU()     { mOpen('Nuevo movimiento USD', uBody(), 'saveUsd(null)'); }
+function oEditU(id)  { const x = DB.u.find(m=>m.id===id); if(x) mOpen('Editar movimiento USD', uBody(x), `saveUsd('${id}')`); }
+
+function saveUsd(id) {
+  const m = +document.getElementById('u-m').value;
+  if (!m) return alert('Ingresá el monto en USD');
+  const x = {
+    id: id||uid(),
+    fecha:       document.getElementById('u-f').value,
+    tipo:        document.getElementById('u-t').value,
+    montoUsd:    m,
+    tipoCambio:  +document.getElementById('u-tc').value || null,
+    ubicacion:   document.getElementById('u-u').value,
+    responsable: document.getElementById('u-r').value.trim(),
+    comentario:  document.getElementById('u-c').value.trim(),
+  };
+  if (id) DB.u = DB.u.map(m2 => m2.id===id ? x : m2); else DB.u.push(x);
+  dbSave('u'); mClose(); rview();
+}
+
+function dUsd(id) {
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  DB.u = DB.u.filter(x=>x.id!==id); dbSave('u'); rview();
+}
+
+
 function mHtml(title, body, saveFn) {
   return `
     <div class="modal-header">
