@@ -331,7 +331,18 @@
       </div>
     </div>
     <nav id="nav"></nav>
-    <div class="sidebar-footer">Datos guardados localmente</div>
+    <div class="sidebar-footer">
+      <div style="margin-bottom:8px;color:rgba(255,255,255,.35);font-size:11px">Datos guardados localmente</div>
+      <button onclick="exportDB()" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;margin-bottom:6px;text-align:left">
+        ↓ Exportar backup
+      </button>
+      <label style="width:100%;display:block">
+        <span style="display:block;width:100%;padding:7px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-size:12px;cursor:pointer;text-align:left">
+          ↑ Importar backup
+        </span>
+        <input type="file" accept=".json" onchange="importDB(event)" style="display:none">
+      </label>
+    </div>
   </aside>
 
   <!-- MAIN -->
@@ -350,8 +361,12 @@ const ARS = n => new Intl.NumberFormat('es-AR', {style:'currency', currency:'ARS
 const fmtD = s => s ? new Date(s+'T12:00').toLocaleDateString('es-AR') : '—';
 const hoy = () => new Date().toISOString().slice(0,10);
 const MN = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const CATS = ['Flete/Envío','Alquiler','Servicios','Personal','Marketing','Impuestos','Materiales','Varios'];
+const CATS = ['Flete/Envío','Alquiler','Servicios','Personal','Publicidad','Impuestos','Materiales','Varios','Tasa'];
 const UNIS = ['unidad','kg','litro','caja','pack','metro','par','bolsa'];
+const CANALES = ['Particular','Meli'];
+const MEDIOS_COBRO = ['Transferencia','Efectivo','Débito','Crédito','Mercado Pago'];
+// Tasa e Impuestos se manejan aparte en resultados
+const CATS_OP = ['Flete/Envío','Alquiler','Servicios','Personal','Publicidad','Materiales','Varios'];
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
 const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos', u:'gp_usd'};
@@ -364,10 +379,35 @@ function dbLoad() {
 }
 const dbSave = k => { try { localStorage.setItem(SK[k], JSON.stringify(DB[k])); } catch {} };
 
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CFG_SK = 'gp_cfg';
+const CFG_DEF = {mlComision:14, costoEnvioMeli:0, iibbPct:0};
+let CFG = {...CFG_DEF};
+
+function cfgLoad() {
+  try { const r = localStorage.getItem(CFG_SK); if(r) CFG = {...CFG_DEF, ...JSON.parse(r)}; } catch {}
+}
+function cfgSave() { try { localStorage.setItem(CFG_SK, JSON.stringify(CFG)); } catch {} }
+
+// ─── TC AUTOMÁTICO (dolarapi.com) ─────────────────────────────────────────────
+let tcCache = null;
+async function fetchTC() {
+  if (tcCache) return tcCache;
+  try {
+    const r = await fetch('https://dolarapi.com/v1/dolares/oficial');
+    const d = await r.json();
+    tcCache = d.venta || null;
+    return tcCache;
+  } catch { return null; }
+}
+
 // ─── STOCK CALC ───────────────────────────────────────────────────────────────
 function stockProd(prod) {
   const li = DB.l.flatMap(l => l.items||[]).filter(i => i.pid === prod.id);
-  const vi = DB.v.flatMap(v => v.items||[]).filter(i => i.pid === prod.id);
+  // soporta formato nuevo (pid+cantidad) y viejo (items[])
+  const vi = DB.v.filter(v => v.pid === prod.id)
+    .map(v => ({qty: v.cantidad||0}))
+    .concat(DB.v.flatMap(v => (v.items||[]).filter(i=>i.pid===prod.id&&!v.pid)));
   const qty  = li.reduce((s,i) => s + i.qty, 0);
   const cost = li.reduce((s,i) => s + i.qty * i.costo, 0);
   return {
@@ -378,7 +418,7 @@ function stockProd(prod) {
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
 let view = 'dashboard', rPer = '6m', chart = null;
-let lF = {}, lI = [], vF = {}, vI = [];
+let lF = {}, lI = [], vF = {};
 
 const NAVS = [
   {id:'dashboard', icon:'◈', l:'Dashboard'},
@@ -389,6 +429,7 @@ const NAVS = [
   {id:'usd',       icon:'$', l:'Movimientos USD'},
   {id:'caja',      icon:'⇌', l:'Flujo de caja'},
   {id:'res',       icon:'≡', l:'Resultados'},
+  {id:'cfg',       icon:'⚙', l:'Configuración'},
 ];
 
 function rnav() {
@@ -403,7 +444,7 @@ function go(v2) { view = v2; rnav(); rview(); }
 
 function rview() {
   if (chart) { chart.destroy(); chart = null; }
-  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, usd:vUsd, caja:vCaja, res:vRes};
+  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, usd:vUsd, caja:vCaja, res:vRes, cfg:vCfg};
   document.getElementById('main').innerHTML = (mp[view] || vDash)();
   if (view === 'dashboard') setTimeout(iChart, 50);
 }
@@ -566,6 +607,7 @@ function buildLotBody() {
   return `
     <div class="grid2">
       <div class="field"><label>Fecha</label><input type="date" id="l-f" value="${lF.fecha||hoy()}" oninput="lF.fecha=this.value"></div>
+      <div class="field"><label>Nº de Lote</label><input id="l-nro" value="${lF.nro||''}" oninput="lF.nro=this.value" placeholder="Ej: L-001"></div>
       <div class="field"><label>Proveedor</label><input id="l-p" value="${lF.prov||''}" oninput="lF.prov=this.value" placeholder="Nombre del proveedor"></div>
       <div class="field"><label>Estado</label>
         <select oninput="lF.est=this.value">
@@ -573,7 +615,7 @@ function buildLotBody() {
           <option value="pendiente"${lF.est==='pendiente'?' selected':''}>Pendiente</option>
         </select>
       </div>
-      <div class="field"><label>Notas</label><input value="${lF.notas||''}" oninput="lF.notas=this.value" placeholder="Observaciones"></div>
+      <div class="field span2"><label>Notas</label><input value="${lF.notas||''}" oninput="lF.notas=this.value" placeholder="Observaciones"></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
       <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Productos del lote</span>
@@ -590,6 +632,7 @@ function refreshLotModal(title, fn) {
 function vLot() {
   const rows = [...DB.l].reverse().map(l => `<tr>
     <td>${fmtD(l.fecha)}</td>
+    <td><span class="mono" style="font-size:12px;color:var(--brand);font-weight:600">${l.nroLote||'—'}</span></td>
     <td>${l.proveedor||'—'}</td>
     <td style="font-size:12px;color:var(--text2)">${(l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return`${i.qty}× ${p?p.nombre:'?'}`;}).join(', ')}</td>
     <td class="mono">${ARS(l.total)}</td>
@@ -604,8 +647,8 @@ function vLot() {
     <div class="card">
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Proveedor</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${rows||`<tr><td colspan="6"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
+          <thead><tr><th>Fecha</th><th>Nº Lote</th><th>Proveedor</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="7"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
@@ -627,7 +670,7 @@ function slLI(i,pid) {
 
 function saveLot() {
   if (lI.some(i=>!i.pid)) return alert('Seleccioná un producto en cada fila');
-  DB.l.push({id:uid(), fecha:lF.fecha||hoy(), proveedor:lF.prov, estado:lF.est, notas:lF.notas, items:[...lI], total:lI.reduce((s,i)=>s+i.qty*i.costo,0)});
+  DB.l.push({id:uid(), nroLote:lF.nro||'', fecha:lF.fecha||hoy(), proveedor:lF.prov, estado:lF.est, notas:lF.notas, items:[...lI], total:lI.reduce((s,i)=>s+i.qty*i.costo,0)});
   dbSave('l'); mClose(); rview();
 }
 function dLot(id) {
@@ -636,60 +679,153 @@ function dLot(id) {
 }
 
 // ─── VENTAS ───────────────────────────────────────────────────────────────────
-function buildVentBody() {
-  const aps = DB.p.map(p => ({...p, ...stockProd(p)}));
-  const items = vI.map((it,i) => `
-    <div class="item-row">
-      <select onchange="uvI(${i},this.value)">
-        <option value="">— producto —</option>
-        ${aps.map(p=>`<option value="${p.id}"${it.pid===p.id?' selected':''}>${p.nombre} (stk: ${p.stock})</option>`).join('')}
-      </select>
-      <input type="number" value="${it.qty}" min="1" placeholder="Cant." oninput="vI[${i}].qty=+this.value">
-      <input type="number" value="${it.precio}" min="0" placeholder="$/u" oninput="vI[${i}].precio=+this.value">
-      <button onclick="dVI(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:20px;line-height:1">×</button>
-    </div>`).join('');
-  const tot = vI.reduce((s,i) => s + i.qty * i.precio, 0);
+function calcVenta(f) {
+  const cant      = +f.cantidad||0;
+  const pv        = +f.precioVenta||0;
+  const bruto     = pv * cant;
+  const comML     = f.canal==='Meli' ? bruto * (CFG.mlComision/100) : 0;
+  const envio     = f.canal==='Meli' ? (CFG.costoEnvioMeli||0) * cant : 0;
+  const iibb      = +f.iibb||0;
+  const facturacion  = bruto - comML - envio - iibb;
+  const costoTotal   = (+f.costoU||0) * cant;
+  const margenBruto  = facturacion - costoTotal;
+  const tc           = +f.tc||0;
+  const facturacionUSD = tc ? facturacion/tc : 0;
+  const gananciaUSD    = tc ? margenBruto/tc  : 0;
+  return {bruto,comML,envio,iibb,facturacion,costoTotal,margenBruto,tc,facturacionUSD,gananciaUSD};
+}
+
+function recalcVF() {
+  const c = calcVenta(vF);
+  const set = (id,v,fmt) => { const el=document.getElementById(id); if(el) el.value=fmt?fmt(v):(v||''); };
+  set('vf-comml',   c.comML,       v=>v?ARS(v):'—');
+  set('vf-envio',   c.envio,       v=>v?ARS(v):'—');
+  set('vf-fact',    c.facturacion, ARS);
+  set('vf-mb',      c.margenBruto, ARS);
+  set('vf-fusd',    c.facturacionUSD, v=>v?'USD '+v.toFixed(2):'—');
+  set('vf-gusd',    c.gananciaUSD,    v=>v?'USD '+v.toFixed(2):'—');
+  const mbEl = document.getElementById('vf-mb');
+  if(mbEl) mbEl.style.color = c.margenBruto>=0?'var(--green)':'var(--red)';
+}
+
+function buildVentForm() {
+  const aps = DB.p.map(p=>({...p,...stockProd(p)}));
+  const c   = calcVenta(vF);
   return `
     <div class="grid2">
-      <div class="field"><label>Fecha</label><input type="date" value="${vF.fecha||hoy()}" oninput="vF.fecha=this.value"></div>
-      <div class="field"><label>Cliente</label><input value="${vF.cli||''}" oninput="vF.cli=this.value" placeholder="Nombre del cliente"></div>
-      <div class="field"><label>Estado</label>
-        <select oninput="vF.est=this.value">
-          <option value="cobrado"${vF.est!=='pendiente'?' selected':''}>Cobrado</option>
-          <option value="pendiente"${vF.est==='pendiente'?' selected':''}>Pendiente / Cta. cte.</option>
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="vf-fecha" value="${vF.fecha||hoy()}" oninput="vF.fecha=this.value">
+      </div>
+      <div class="field"><label>Nº Factura</label>
+        <input id="vf-fac" value="${vF.factura||''}" oninput="vF.factura=this.value" placeholder="Opcional">
+      </div>
+      <div class="field"><label>Producto *</label>
+        <select id="vf-pid" onchange="vfSetProd(this.value)">
+          <option value="">— seleccionar —</option>
+          ${aps.map(p=>`<option value="${p.id}"${vF.pid===p.id?' selected':''}>${p.nombre} (stock: ${p.stock})</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label>Notas</label><input value="${vF.notas||''}" oninput="vF.notas=this.value" placeholder="Observaciones"></div>
+      <div class="field"><label>Cliente</label>
+        <input id="vf-cli" value="${vF.cliente||''}" oninput="vF.cliente=this.value" placeholder="Nombre del cliente">
+      </div>
+      <div class="field"><label>Canal *</label>
+        <select id="vf-canal" onchange="vF.canal=this.value;recalcVF()">
+          ${CANALES.map(c=>`<option${vF.canal===c?' selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Cantidad</label>
+        <input type="number" id="vf-cant" value="${vF.cantidad||1}" min="1" oninput="vF.cantidad=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>Precio venta ($ / u)</label>
+        <input type="number" id="vf-pv" value="${vF.precioVenta||''}" min="0" oninput="vF.precioVenta=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>Costo U. ($ / u)</label>
+        <input type="number" id="vf-cu" value="${vF.costoU||''}" min="0" oninput="vF.costoU=+this.value;recalcVF()" style="background:var(--bg3)">
+      </div>
+      <div class="field"><label>IIBB ($)</label>
+        <input type="number" id="vf-iibb" value="${vF.iibb||0}" min="0" oninput="vF.iibb=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>TC ($ por USD)</label>
+        <input type="number" id="vf-tc" value="${vF.tc||''}" min="0" placeholder="Auto BCRA" oninput="vF.tc=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>Medio de cobro</label>
+        <select id="vf-mc" onchange="vF.medioCobro=this.value">
+          ${MEDIOS_COBRO.map(m=>`<option${vF.medioCobro===m?' selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Estado</label>
+        <select id="vf-est" onchange="vF.estado=this.value">
+          <option value="cobrado"${vF.estado!=='pendiente'?' selected':''}>Cobrado</option>
+          <option value="pendiente"${vF.estado==='pendiente'?' selected':''}>Pendiente</option>
+        </select>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
-      <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Productos vendidos</span>
-      <button class="btn btn-sm" onclick="aVI()">+ Agregar fila</button>
-    </div>
-    <div>${items}</div>
-    <div class="item-total">Total venta: ${ARS(tot)}</div>`;
+    <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:12px;margin-top:4px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Cálculo automático</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        ${[
+          ['Comisión ML',     'vf-comml'],
+          ['Costo Envío',     'vf-envio'],
+          ['Facturación',     'vf-fact'],
+          ['Margen Bruto',    'vf-mb'],
+          ['Fact. USD',       'vf-fusd'],
+          ['Ganancia USD',    'vf-gusd'],
+        ].map(([l,id])=>`<div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l}</div>
+          <input id="${id}" readonly value="${
+            id==='vf-comml'?(c.comML?ARS(c.comML):'—'):
+            id==='vf-envio'?(c.envio?ARS(c.envio):'—'):
+            id==='vf-fact'?ARS(c.facturacion):
+            id==='vf-mb'?ARS(c.margenBruto):
+            id==='vf-fusd'?(c.facturacionUSD?'USD '+c.facturacionUSD.toFixed(2):'—'):
+            (c.gananciaUSD?'USD '+c.gananciaUSD.toFixed(2):'—')
+          }" style="background:transparent;border:none;padding:4px 0;font-family:var(--font-mono);font-size:13px;font-weight:600;${id==='vf-mb'?(c.margenBruto>=0?'color:var(--green)':'color:var(--red)'):'color:var(--brand)'}">
+        </div>`).join('')}
+      </div>
+    </div>`;
 }
 
-function refreshVentModal() {
-  document.getElementById('modal-box').innerHTML = mHtml('Nueva venta', buildVentBody(), 'saveVent()');
-}
-
-function uvI(i,pid) {
-  vI[i].pid = pid;
+function vfSetProd(pid) {
+  vF.pid = pid;
   const p = DB.p.find(x=>x.id===pid);
-  if (p && p.precioVenta) vI[i].precio = p.precioVenta;
-  refreshVentModal();
+  if (p) {
+    const st = stockProd(p);
+    vF.precioVenta = p.precioVenta || 0;
+    vF.costoU      = st.cp || 0;
+    document.getElementById('vf-pv').value = vF.precioVenta;
+    document.getElementById('vf-cu').value = vF.costoU;
+    recalcVF();
+  }
 }
 
 function vVent() {
-  const pend = DB.v.filter(v=>v.estado==='pendiente').reduce((s,v)=>s+v.total,0);
-  const rows = [...DB.v].reverse().map(v => `<tr>
-    <td>${fmtD(v.fecha)}</td>
-    <td>${v.cliente||'—'}</td>
-    <td style="font-size:12px;color:var(--text2)">${(v.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return`${i.qty}× ${p?p.nombre:'?'}`;}).join(', ')}</td>
-    <td class="mono" style="color:var(--green)">${ARS(v.total)}</td>
-    <td><span class="badge badge-${v.estado==='cobrado'?'green':'amber'}">${v.estado}</span></td>
-    <td><button class="btn btn-sm btn-danger" onclick="dVent('${v.id}')">Eliminar</button></td>
-  </tr>`).join('');
+  const pend = DB.v.filter(v=>v.estado==='pendiente').reduce((s,v)=>s+(v.facturacion||v.total||0),0);
+  const rows = [...DB.v].reverse().map(v => {
+    const prod = DB.p.find(p=>p.id===v.pid);
+    const nombre = prod ? prod.nombre : (v.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return p?p.nombre:'?';}).join(', ');
+    const fact = v.facturacion ?? v.total ?? 0;
+    const mb   = v.margenBruto ?? 0;
+    return `<tr>
+      <td style="white-space:nowrap">${fmtD(v.fecha)}</td>
+      <td style="font-size:12px">${v.factura||'—'}</td>
+      <td style="font-size:12px">${v.cliente||'—'}</td>
+      <td style="font-size:12px;font-weight:500">${nombre}</td>
+      <td><span class="badge badge-${v.canal==='Meli'?'amber':'blue'}">${v.canal||'—'}</span></td>
+      <td class="mono" style="text-align:center">${v.cantidad||'—'}</td>
+      <td class="mono">${ARS(v.precioVenta||0)}</td>
+      <td class="mono" style="color:var(--red);font-size:12px">${v.comisionML?ARS(v.comisionML):'—'}</td>
+      <td class="mono" style="color:var(--red);font-size:12px">${v.costoEnvio?ARS(v.costoEnvio):'—'}</td>
+      <td class="mono" style="color:var(--red);font-size:12px">${v.iibb?ARS(v.iibb):'—'}</td>
+      <td class="mono" style="color:var(--brand);font-weight:600">${ARS(fact)}</td>
+      <td class="mono" style="color:${mb>=0?'var(--green)':'var(--red)'};font-weight:600">${ARS(mb)}</td>
+      <td style="font-size:12px">${v.medioCobro||'—'}</td>
+      <td class="mono" style="font-size:12px;color:var(--text2)">${v.tc?'$'+v.tc.toLocaleString('es-AR'):'—'}</td>
+      <td class="mono" style="font-size:12px;color:var(--text2)">${v.facturacionUSD?'USD '+v.facturacionUSD.toFixed(0):'—'}</td>
+      <td class="mono" style="font-size:12px;color:var(--text2)">${v.gananciaUSD?'USD '+v.gananciaUSD.toFixed(0):'—'}</td>
+      <td><span class="badge badge-${v.estado==='cobrado'?'green':'amber'}">${v.estado||'cobrado'}</span></td>
+      <td><button class="btn btn-sm btn-danger" onclick="dVent('${v.id}')">Eliminar</button></td>
+    </tr>`;
+  }).join('');
   return `
     <div class="page-header">
       <div>
@@ -701,31 +837,49 @@ function vVent() {
     <div class="card">
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${rows||`<tr><td colspan="6"><div class="empty"><div class="empty-icon">◎</div><div class="empty-text">Sin ventas registradas</div></div></td></tr>`}</tbody>
+          <thead><tr>
+            <th>Fecha</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Canal</th>
+            <th>Cant.</th><th>P.Venta</th><th>Com.ML</th><th>C.Envío</th><th>IIBB</th>
+            <th>Facturación</th><th>Margen Bruto</th><th>Cobro</th>
+            <th>TC</th><th>Fact.USD</th><th>Gan.USD</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="18"><div class="empty"><div class="empty-icon">◎</div><div class="empty-text">Sin ventas registradas</div></div></td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
 }
 
-function oNewV() {
-  vF = {fecha:hoy(), cli:'', est:'cobrado', notas:''};
-  vI = [{pid:'', qty:1, precio:0}];
-  mOpen('Nueva venta', buildVentBody(), 'saveVent()');
+async function oNewV() {
+  const tc = await fetchTC();
+  vF = {
+    fecha:hoy(), factura:'', cliente:'', pid:'', canal:'Particular',
+    cantidad:1, precioVenta:0, costoU:0, iibb:0,
+    tc: tc||'', medioCobro:'Transferencia', estado:'cobrado'
+  };
+  mOpen('Nueva venta', buildVentForm(), 'saveVent()');
 }
-function aVI()  { vI.push({pid:'', qty:1, precio:0}); refreshVentModal(); }
-function dVI(i) { vI.splice(i,1); refreshVentModal(); }
 
 function saveVent() {
-  if (vI.some(i=>!i.pid)) return alert('Seleccioná un producto en cada fila');
-  const aps = DB.p.map(p => ({...p, ...stockProd(p)}));
-  for (const it of vI) {
-    const p = aps.find(x=>x.id===it.pid);
-    if (p && p.stock < it.qty) return alert(`Stock insuficiente para "${p.nombre}" (disponible: ${p.stock})`);
-  }
-  DB.v.push({id:uid(), fecha:vF.fecha||hoy(), cliente:vF.cli, estado:vF.est, notas:vF.notas, items:[...vI], total:vI.reduce((s,i)=>s+i.qty*i.precio,0)});
+  if (!vF.pid) return alert('Seleccioná un producto');
+  const p = DB.p.find(x=>x.id===vF.pid);
+  const st = stockProd(p);
+  if (st.stock < vF.cantidad) return alert(`Stock insuficiente para "${p.nombre}" (disponible: ${st.stock})`);
+  const c = calcVenta(vF);
+  DB.v.push({
+    id:uid(), fecha:vF.fecha||hoy(), factura:vF.factura, cliente:vF.cliente,
+    pid:vF.pid, canal:vF.canal, cantidad:vF.cantidad,
+    precioVenta:vF.precioVenta, costoU:vF.costoU, iibb:vF.iibb, tc:vF.tc,
+    medioCobro:vF.medioCobro, estado:vF.estado,
+    comisionML:c.comML, costoEnvio:c.envio,
+    facturacion:c.facturacion, margenBruto:c.margenBruto,
+    facturacionUSD:c.facturacionUSD, gananciaUSD:c.gananciaUSD,
+    // compatibilidad stock
+    items:[{pid:vF.pid, qty:vF.cantidad}],
+    total:c.facturacion
+  });
   dbSave('v'); mClose(); rview();
 }
+
 function dVent(id) {
   if (!confirm('¿Eliminar esta venta?')) return;
   DB.v = DB.v.filter(x=>x.id!==id); dbSave('v'); rview();
@@ -734,27 +888,40 @@ function dVent(id) {
 // ─── GASTOS ───────────────────────────────────────────────────────────────────
 function vGast() {
   const now = new Date();
-  const tm = DB.g.filter(g=>{const d=new Date(g.fecha);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();}).reduce((s,g)=>s+g.monto,0);
-  const rows = [...DB.g].reverse().map(g => `<tr>
-    <td>${fmtD(g.fecha)}</td>
-    <td><span class="badge badge-blue">${g.categoria}</span></td>
-    <td>${g.descripcion}</td>
-    <td class="mono" style="color:var(--amber)">${ARS(g.monto)}</td>
-    <td><button class="btn btn-sm btn-danger" onclick="dGas('${g.id}')">Eliminar</button></td>
-  </tr>`).join('');
+  const tm = DB.g.filter(g=>{
+    const d=new Date(g.fecha);
+    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()&&g.categoria!=='Tasa';
+  }).reduce((s,g)=>s+g.monto,0);
+  const tt = DB.g.filter(g=>{
+    const d=new Date(g.fecha);
+    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()&&g.categoria==='Tasa';
+  }).reduce((s,g)=>s+g.monto,0);
+  const rows = [...DB.g].reverse().map(g => {
+    const esTasa = g.categoria==='Tasa';
+    return `<tr>
+      <td>${fmtD(g.fecha)}</td>
+      <td><span class="badge badge-${esTasa?'green':'blue'}">${g.categoria}</span></td>
+      <td>${g.descripcion}</td>
+      <td class="mono" style="color:${esTasa?'var(--green)':'var(--amber)'}">${esTasa?'+':''}${ARS(g.monto)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="dGas('${g.id}')">Eliminar</button></td>
+    </tr>`;
+  }).join('');
   return `
     <div class="page-header">
       <div>
-        <div class="page-title">Gastos operativos</div>
-        <div class="page-sub">Este mes: <strong style="color:var(--amber)">${ARS(tm)}</strong></div>
+        <div class="page-title">Gastos / Ingresos</div>
+        <div class="page-sub">
+          Este mes — Gastos: <strong style="color:var(--amber)">${ARS(tm)}</strong>
+          ${tt>0?`&nbsp;·&nbsp; Tasa: <strong style="color:var(--green)">${ARS(tt)}</strong>`:''}
+        </div>
       </div>
-      <button class="btn btn-primary" onclick="oNewG()">+ Nuevo gasto</button>
+      <button class="btn btn-primary" onclick="oNewG()">+ Nuevo registro</button>
     </div>
     <div class="card">
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th></tr></thead>
-          <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin gastos registrados</div></div></td></tr>`}</tbody>
+          <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin registros</div></div></td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
@@ -821,34 +988,47 @@ function vCaja() {
 }
 
 // ─── RESULTADOS ───────────────────────────────────────────────────────────────
-// Categorías que van ANTES de Utilidad antes de impuestos
-const CATS_OP = ['Flete/Envío','Alquiler','Servicios','Personal','Marketing','Materiales','Varios'];
-// Impuestos va separado, después de la utilidad operativa
-
 function resMonthData(y, m) {
-  const aps = DB.p.map(p=>({...p,...stockProd(p)}));
   const fv = DB.v.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
   const fg = DB.g.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
 
-  const ventas = fv.reduce((s,v)=>s+v.total,0);
-  const cmv    = fv.flatMap(v=>v.items||[]).reduce((s,it)=>{
-    const p=aps.find(x=>x.id===it.pid); return s+it.qty*(p?.cp||0);
-  },0);
+  // Ventas brutas (precio × cant) — nuevo formato; fallback a total para registros viejos
+  const ventas    = fv.reduce((s,v)=>s+((v.precioVenta&&v.cantidad)?v.precioVenta*v.cantidad:(v.total||0)),0);
+  const cmv       = fv.reduce((s,v)=>s+(v.costoU&&v.cantidad?v.costoU*v.cantidad:0),0);
   const utilBruta = ventas - cmv;
 
+  // Deducibles de venta
+  const costoEnvio   = fv.reduce((s,v)=>s+(v.costoEnvio||0),0);
+  const comisionML   = fv.reduce((s,v)=>s+(v.comisionML||0),0);
+  const iibbVentas   = fv.reduce((s,v)=>s+(v.iibb||0),0);
+
+  // Gastos por categoría
   const gastosCat = {};
   CATS.forEach(cat=>{
     gastosCat[cat]=fg.filter(g=>g.categoria===cat).reduce((s,g)=>s+g.monto,0);
   });
-  const gastoOp   = CATS_OP.reduce((s,c)=>s+(gastosCat[c]||0),0);
-  const impuestos = gastosCat['Impuestos']||0;
-  const utilAntesImp = utilBruta - gastoOp;
-  const utilNeta     = utilAntesImp - impuestos;
-  const pctUV  = ventas>0 ? utilNeta/ventas*100   : null;
-  const margen = ventas>0 ? utilBruta/ventas*100  : null;
-  const facMin = margen   ? gastoOp/(margen/100)  : null;
 
-  return {ventas,cmv,utilBruta,gastosCat,gastoOp,impuestos,utilAntesImp,utilNeta,pctUV,margen,facMin};
+  // Impuestos = IIBB ventas + categoría Impuestos de gastos
+  const impuestos      = iibbVentas + (gastosCat['Impuestos']||0);
+  const totalDedVenta  = costoEnvio + comisionML + impuestos;
+  const facturacionNeta = utilBruta - totalDedVenta;
+
+  // Gastos operativos (excluye Impuestos y Tasa)
+  const gastoOp = CATS_OP.reduce((s,c)=>s+(gastosCat[c]||0),0);
+
+  // Tasa = ingreso financiero (suma, no resta)
+  const tasa     = gastosCat['Tasa']||0;
+  const utilNeta = facturacionNeta - gastoOp + tasa;
+  const pctUV    = ventas>0 ? utilNeta/ventas*100           : null;
+  const margen   = ventas>0 ? facturacionNeta/ventas*100    : null;
+  const facMin   = margen   ? gastoOp/(margen/100)          : null;
+
+  return {
+    ventas, cmv, utilBruta,
+    costoEnvio, comisionML, impuestos, totalDedVenta,
+    facturacionNeta, gastosCat, gastoOp,
+    tasa, utilNeta, pctUV, margen, facMin
+  };
 }
 
 function vRes() {
@@ -869,19 +1049,23 @@ function vRes() {
 
   // Columna TOTAL
   const tot = {
-    ventas:       mData.reduce((s,d)=>s+d.ventas,0),
-    cmv:          mData.reduce((s,d)=>s+d.cmv,0),
-    utilBruta:    mData.reduce((s,d)=>s+d.utilBruta,0),
-    gastosCat:    {},
-    gastoOp:      mData.reduce((s,d)=>s+d.gastoOp,0),
-    impuestos:    mData.reduce((s,d)=>s+d.impuestos,0),
-    utilAntesImp: mData.reduce((s,d)=>s+d.utilAntesImp,0),
-    utilNeta:     mData.reduce((s,d)=>s+d.utilNeta,0),
+    ventas:           mData.reduce((s,d)=>s+d.ventas,0),
+    cmv:              mData.reduce((s,d)=>s+d.cmv,0),
+    utilBruta:        mData.reduce((s,d)=>s+d.utilBruta,0),
+    costoEnvio:       mData.reduce((s,d)=>s+d.costoEnvio,0),
+    comisionML:       mData.reduce((s,d)=>s+d.comisionML,0),
+    impuestos:        mData.reduce((s,d)=>s+d.impuestos,0),
+    totalDedVenta:    mData.reduce((s,d)=>s+d.totalDedVenta,0),
+    facturacionNeta:  mData.reduce((s,d)=>s+d.facturacionNeta,0),
+    gastosCat:        {},
+    gastoOp:          mData.reduce((s,d)=>s+d.gastoOp,0),
+    tasa:             mData.reduce((s,d)=>s+d.tasa,0),
+    utilNeta:         mData.reduce((s,d)=>s+d.utilNeta,0),
   };
   CATS.forEach(cat=>{ tot.gastosCat[cat]=mData.reduce((s,d)=>s+(d.gastosCat[cat]||0),0); });
-  tot.pctUV  = tot.ventas>0 ? tot.utilNeta/tot.ventas*100  : null;
-  tot.margen = tot.ventas>0 ? tot.utilBruta/tot.ventas*100 : null;
-  tot.facMin = tot.margen   ? tot.gastoOp/(tot.margen/100) : null;
+  tot.pctUV  = tot.ventas>0 ? tot.utilNeta/tot.ventas*100        : null;
+  tot.margen = tot.ventas>0 ? tot.facturacionNeta/tot.ventas*100 : null;
+  tot.facMin = tot.margen   ? tot.gastoOp/(tot.margen/100)       : null;
 
   const cols   = [...mData, tot];
   const allLbl = [...labels, 'Total'];
@@ -951,30 +1135,80 @@ function vRes() {
             </tr>
           </thead>
           <tbody>
-            ${row('Ventas',              d=>d.ventas,        {bold:false})}
-            ${row('CMV',                 d=>d.cmv,           {neg:true})}
+            ${rowHeader('Ventas')}
+            ${row('Ventas brutas',         d=>d.ventas,          {})}
+            ${row('CMV',                   d=>d.cmv,             {indent:true, neg:true})}
             ${rowSep()}
-            ${row('Utilidad Bruta',      d=>d.utilBruta,     {bold:true, subtotal:true})}
+            ${row('Utilidad Bruta',        d=>d.utilBruta,       {bold:true, subtotal:true})}
+            ${rowHeader('Deducibles de venta')}
+            ${row('Costo Envío Meli',      d=>d.costoEnvio,      {indent:true, neg:true})}
+            ${row('Comisión ML',           d=>d.comisionML,      {indent:true, neg:true})}
+            ${row('Impuestos (IIBB + cat.)', d=>d.impuestos,     {indent:true, neg:true})}
             ${rowSep()}
-            ${CATS_OP.map(cat=>row(cat, d=>d.gastosCat[cat]||0, {indent:true,neg:true})).join('')}
+            ${row('Facturación Neta',      d=>d.facturacionNeta, {bold:true, subtotal:true})}
+            ${rowHeader('Gastos operativos')}
+            ${CATS_OP.map(cat=>row(cat,    d=>d.gastosCat[cat]||0,{indent:true, neg:true})).join('')}
             ${rowSep()}
-            ${row('Subtotal Gastos Op.', d=>d.gastoOp,       {neg:true, bold:true, subtotal:true})}
+            ${row('Subtotal Gastos Op.',   d=>d.gastoOp,         {neg:true, bold:true, subtotal:true})}
+            ${rowHeader('Gastos / Ingresos varios')}
+            ${row('Tasa (rend. fondo)',    d=>d.tasa,            {indent:true, color:'var(--green)'})}
             ${rowSep()}
-            ${row('Utilidad antes de impuestos', d=>d.utilAntesImp, {bold:true, subtotal:true})}
-            ${row('Impuestos',           d=>d.impuestos,     {indent:true, neg:true})}
-            ${rowSep()}
-            ${row('Utilidad Neta',       d=>d.utilNeta,      {bold:true, subtotal:true})}
-            ${row('Utilidad / Ventas',   d=>d.pctUV,         {pct:true})}
+            ${row('Utilidad Neta',         d=>d.utilNeta,        {bold:true, subtotal:true})}
+            ${row('Utilidad / Ventas %',   d=>d.pctUV,           {pct:true})}
             ${rowHeader('Punto de equilibrio')}
-            ${row('Margen bruto %',      d=>d.margen,        {pct:true})}
-            ${row('Facturación mínima necesaria', d=>d.facMin, {bold:false})}
+            ${row('Margen Neto %',         d=>d.margen,          {pct:true})}
+            ${row('Facturación mínima necesaria', d=>d.facMin,   {})}
           </tbody>
         </table>
       </div>
     </div>`;
 }
 
-// ─── MOVIMIENTOS USD ──────────────────────────────────────────────────────────
+// ─── CONFIGURACIÓN ────────────────────────────────────────────────────────────
+function vCfg() {
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Configuración</div><div class="page-sub">Parámetros que se aplican automáticamente en ventas</div></div>
+    </div>
+    <div class="card" style="max-width:500px">
+      <div style="padding:1.25rem">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:1rem">Mercado Libre</div>
+        <div class="grid2">
+          <div class="field">
+            <label>Comisión ML (%)</label>
+            <input type="number" id="cfg-ml" value="${CFG.mlComision}" min="0" max="100" step="0.1" oninput="CFG.mlComision=+this.value;cfgSave()">
+          </div>
+          <div class="field">
+            <label>Costo envío Meli ($ / unidad)</label>
+            <input type="number" id="cfg-env" value="${CFG.costoEnvioMeli}" min="0" oninput="CFG.costoEnvioMeli=+this.value;cfgSave()">
+          </div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:1.25rem 0 1rem">Tipo de cambio</div>
+        <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:12px">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">El TC se consulta automáticamente desde <strong>dolarapi.com (oficial)</strong> al abrir cada nueva venta. Podés editarlo manualmente en cada registro.</div>
+          <button class="btn" onclick="testTC()">Consultar TC ahora</button>
+          <span id="cfg-tc-res" style="margin-left:10px;font-size:13px;color:var(--text2)"></span>
+        </div>
+        <div style="margin-top:1.25rem;padding:1rem;background:var(--bg3);border-radius:var(--radius-sm);font-size:12px;color:var(--text2)">
+          <strong>Fórmulas aplicadas en ventas:</strong><br><br>
+          Comisión ML = Precio × Cant × ${CFG.mlComision}% <em>(solo Meli)</em><br>
+          Costo Envío = $${(CFG.costoEnvioMeli||0).toLocaleString('es-AR')} × Cant <em>(solo Meli)</em><br>
+          Facturación = (Precio × Cant) − Com.ML − C.Envío − IIBB<br>
+          Margen Bruto = Facturación − Costo U. × Cant<br>
+          Fact. USD = Facturación ÷ TC
+        </div>
+      </div>
+    </div>`;
+}
+
+async function testTC() {
+  document.getElementById('cfg-tc-res').textContent = 'Consultando...';
+  tcCache = null;
+  const tc = await fetchTC();
+  document.getElementById('cfg-tc-res').textContent = tc ? `TC oficial: $${tc.toLocaleString('es-AR')}` : 'No disponible (sin conexión)';
+}
+
+
 const USD_TIPOS = ['Compra USD','Venta USD','Entrada (cobro)','Salida (pago)','Transferencia interna'];
 const USD_UBIC  = ['Cash — en mano','Banco — cuenta propia','Banco — cuenta tercero','Caja fuerte','Billetera digital'];
 
@@ -1148,8 +1382,46 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) mClose();
 });
 
-// ─── BOOT ─────────────────────────────────────────────────────────────────────
+// ─── EXPORT / IMPORT ─────────────────────────────────────────────────────────
+function exportDB() {
+  const fecha = new Date().toISOString().slice(0,10);
+  const data  = JSON.stringify({version:1, fecha, ...DB}, null, 2);
+  const blob  = new Blob([data], {type:'application/json'});
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href      = url;
+  a.download  = `tjtech-backup-${fecha}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importDB(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!confirm(`¿Importar backup del ${data.fecha||'?'}?\n\nEsto va a REEMPLAZAR todos los datos actuales.`)) return;
+      if (data.p) DB.p = data.p;
+      if (data.l) DB.l = data.l;
+      if (data.v) DB.v = data.v;
+      if (data.g) DB.g = data.g;
+      if (data.u) DB.u = data.u;
+      Object.keys(SK).forEach(k => dbSave(k));
+      alert('✓ Datos importados correctamente');
+      rview();
+    } catch {
+      alert('El archivo no es válido. Asegurate de usar un backup exportado desde esta app.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+
 dbLoad();
+cfgLoad();
 rnav();
 rview();
 </script>
