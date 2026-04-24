@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GestorPro — Panel de control</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8f8f6;
+    --bg2: #ffffff;
+    --bg3: #f0efe9;
+    --border: #e2e1db;
+    --border2: #d0cfc8;
+    --text: #1a1a18;
+    --text2: #6b6a64;
+    --text3: #9b9a94;
+    --green: #16a34a;
+    --green-bg: #f0fdf4;
+    --green-border: #bbf7d0;
+    --amber: #d97706;
+    --amber-bg: #fffbeb;
+    --amber-border: #fde68a;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --red-border: #fecaca;
+    --blue: #2563eb;
+    --blue-bg: #eff6ff;
+    --blue-border: #bfdbfe;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font-mono: 'JetBrains Mono', monospace;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.08);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ─── LAYOUT ─── */
+  .app { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 220px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+  }
+
+  .sidebar-logo {
+    padding: 1.25rem 1.25rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo .name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -.3px;
+  }
+  .sidebar-logo .sub {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 1px;
+  }
+
+  nav { padding: .75rem; flex: 1; overflow-y: auto; }
+
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text2);
+    border-radius: var(--radius-sm);
+    text-align: left;
+    transition: background .12s, color .12s;
+    margin-bottom: 1px;
+  }
+  .nav-btn:hover { background: var(--bg3); color: var(--text); }
+  .nav-btn.active {
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 500;
+  }
+  .nav-icon { width: 16px; text-align: center; font-size: 14px; flex-shrink: 0; }
+
+  .sidebar-footer {
+    padding: .75rem 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  .main {
+    margin-left: 220px;
+    flex: 1;
+    padding: 2rem 2rem 4rem;
+    max-width: 1100px;
+  }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .card-body { padding: 1.25rem; }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+  .metric {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .metric-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+  .metric-value { font-size: 22px; font-weight: 600; font-family: var(--font-mono); letter-spacing: -.5px; }
+  .metric-value.green { color: var(--green); }
+  .metric-value.amber { color: var(--amber); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.blue { color: var(--blue); }
+
+  /* ─── PAGE HEADER ─── */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .page-title { font-size: 20px; font-weight: 600; letter-spacing: -.3px; }
+  .page-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 13px; font-family: inherit; font-weight: 500;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg3); border-color: var(--border2); }
+  .btn-primary {
+    background: var(--text);
+    color: #fff;
+    border-color: var(--text);
+  }
+  .btn-primary:hover { background: #333; }
+  .btn-danger { color: var(--red); border-color: var(--red-border); }
+  .btn-danger:hover { background: var(--red-bg); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-seg {
+    padding: 6px 12px; font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text2);
+    font-family: inherit; cursor: pointer;
+    transition: all .12s;
+  }
+  .btn-seg.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 500; }
+
+  /* ─── TABLE ─── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .mono { font-family: var(--font-mono); font-size: 13px; }
+
+  /* ─── BADGES ─── */
+  .badge {
+    display: inline-block; padding: 3px 8px;
+    border-radius: 20px; font-size: 11px; font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .badge-red   { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+  .badge-blue  { background: var(--blue-bg);  color: var(--blue);  border: 1px solid var(--blue-border); }
+
+  /* ─── EMPTY STATE ─── */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); }
+  .empty-icon { font-size: 32px; margin-bottom: .75rem; }
+  .empty-text { font-size: 14px; }
+
+  /* ─── MODAL ─── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.45);
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 2rem 1rem; overflow-y: auto;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    width: 100%; max-width: 560px;
+    animation: mIn .15s ease;
+  }
+  @keyframes mIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+  .modal-header {
+    padding: 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+  .modal-close { background: none; border: none; cursor: pointer; font-size: 22px; line-height: 1; color: var(--text2); padding: 0 2px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 1.25rem; }
+  .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* ─── FORMS ─── */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 13px; font-family: inherit;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .span2 { grid-column: span 2; }
+
+  /* ─── LOT/SALE ITEMS ─── */
+  .item-row {
+    display: grid; grid-template-columns: 1fr 80px 110px 30px;
+    gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+  .item-row select, .item-row input { margin: 0; }
+  .item-total { text-align: right; font-family: var(--font-mono); font-size: 13px; font-weight: 500; margin: 8px 0 0; }
+
+  /* ─── RESULTADOS ─── */
+  .res-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 11px 0; border-top: 1px solid var(--border);
+  }
+  .res-row .label { font-size: 14px; color: var(--text); }
+  .res-row .val { font-family: var(--font-mono); font-weight: 500; font-size: 14px; }
+  .res-row .pct { font-size: 11px; color: var(--text3); margin-left: 8px; }
+  .res-total {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-radius: var(--radius-sm); margin-top: 10px;
+  }
+  .res-total .label { font-size: 15px; font-weight: 600; }
+  .res-total .val { font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
+  .res-total.pos { background: var(--green-bg); color: var(--green); }
+  .res-total.neg { background: var(--red-bg); color: var(--red); }
+
+  /* ─── ALERT STRIP ─── */
+  .alert-strip {
+    background: var(--red-bg); border: 1px solid var(--red-border);
+    border-radius: var(--radius); padding: .75rem 1.25rem; margin-bottom: 1.25rem;
+  }
+  .alert-strip-title { font-size: 12px; font-weight: 600; color: var(--red); margin-bottom: 6px; }
+  .alert-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* ─── CHART ─── */
+  .chart-wrap { padding: 1.25rem; }
+  .chart-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 1rem; }
+
+  @media (max-width: 768px) {
+    .sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+    .main { margin-left: 0; padding: 1rem; }
+    .metric-grid { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+    .span2 { grid-column: span 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="name">GestorPro</div>
+      <div class="sub">Panel de control</div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="sidebar-footer">Datos guardados localmente</div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="main"></main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<script>
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+const ARS = n => new Intl.NumberFormat('es-AR', {style:'currency', currency:'ARS', maximumFractionDigits:0}).format(n||0);
+const fmtD = s => s ? new Date(s+'T12:00').toLocaleDateString('es-AR') : '—';
+const hoy = () => new Date().toISOString().slice(0,10);
+const MN = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const CATS = ['Flete/Envío','Alquiler','Servicios','Personal','Marketing','Impuestos','Materiales','Varios'];
+const UNIS = ['unidad','kg','litro','caja','pack','metro','par','bolsa'];
+
+// ─── STORAGE ─────────────────────────────────────────────────────────────────
+const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos'};
+let DB = {p:[], l:[], v:[], g:[]};
+
+function dbLoad() {
+  for (const [k, sk] of Object.entries(SK)) {
+    try { const r = localStorage.getItem(sk); if (r) DB[k] = JSON.parse(r); } catch {}
+  }
+}
+const dbSave = k => { try { localStorage.setItem(SK[k], JSON.stringify(DB[k])); } catch {} };
+
+// ─── STOCK CALC ───────────────────────────────────────────────────────────────
+function stockProd(prod) {
+  const li = DB.l.flatMap(l => l.items||[]).filter(i => i.pid === prod.id);
+  const vi = DB.v.flatMap(v => v.items||[]).filter(i => i.pid === prod.id);
+  const qty  = li.reduce((s,i) => s + i.qty, 0);
+  const cost = li.reduce((s,i) => s + i.qty * i.costo, 0);
+  return {
+    stock: qty - vi.reduce((s,i) => s + i.qty, 0),
+    cp: qty > 0 ? cost / qty : (prod.costoBase || 0)
+  };
+}
+
+// ─── ROUTER ───────────────────────────────────────────────────────────────────
+let view = 'dashboard', rPer = 'mes', chart = null;
+let lF = {}, lI = [], vF = {}, vI = [];
+
+const NAVS = [
+  {id:'dashboard', icon:'◈', l:'Dashboard'},
+  {id:'p',         icon:'▦', l:'Productos'},
+  {id:'l',         icon:'⊞', l:'Compras / Lotes'},
+  {id:'v',         icon:'◎', l:'Ventas'},
+  {id:'g',         icon:'◇', l:'Gastos'},
+  {id:'caja',      icon:'⇌', l:'Flujo de caja'},
+  {id:'res',       icon:'≡', l:'Resultados'},
+];
+
+function rnav() {
+  document.getElementById('nav').innerHTML = NAVS.map(n =>
+    `<button class="nav-btn${view===n.id?' active':''}" onclick="go('${n.id}')">
+      <span class="nav-icon">${n.icon}</span>${n.l}
+    </button>`
+  ).join('');
+}
+
+function go(v2) { view = v2; rnav(); rview(); }
+
+function rview() {
+  if (chart) { chart.destroy(); chart = null; }
+  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, caja:vCaja, res:vRes};
+  document.getElementById('main').innerHTML = (mp[view] || vDash)();
+  if (view === 'dashboard') setTimeout(iChart, 50);
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function vDash() {
+  const tv = DB.v.reduce((s,v) => s + v.total, 0);
+  const tc = DB.l.reduce((s,l) => s + l.total, 0);
+  const tg = DB.g.reduce((s,g) => s + g.monto, 0);
+  const neto = tv - tc - tg;
+  const sv = DB.p.reduce((s,p) => { const st = stockProd(p); return s + st.stock * st.cp; }, 0);
+  const now = new Date();
+  const tvm = DB.v.filter(v => {
+    const d = new Date(v.fecha); return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+  }).reduce((s,v) => s + v.total, 0);
+  const low = DB.p.map(p => ({...p, ...stockProd(p)})).filter(x => x.stock <= 0 || (x.stockMin > 0 && x.stock <= x.stockMin));
+
+  const alertHtml = low.length ? `
+    <div class="alert-strip">
+      <div class="alert-strip-title">⚠ Stock bajo o agotado (${low.length} producto${low.length>1?'s':''})</div>
+      <div class="alert-chips">${low.map(x=>`<span class="badge badge-red">${x.nombre}: ${x.stock} ${x.unidad||''}</span>`).join('')}</div>
+    </div>` : '';
+
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-sub">Resumen general del negocio</div></div>
+    </div>
+    ${alertHtml}
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Valor en stock</div><div class="metric-value blue">${ARS(sv)}</div></div>
+      <div class="metric"><div class="metric-label">Ventas este mes</div><div class="metric-value green">${ARS(tvm)}</div></div>
+      <div class="metric"><div class="metric-label">Total egresos</div><div class="metric-value amber">${ARS(tc+tg)}</div></div>
+      <div class="metric"><div class="metric-label">Resultado neto</div><div class="metric-value ${neto>=0?'green':'red'}">${ARS(neto)}</div></div>
+    </div>
+    <div class="card">
+      <div class="chart-wrap">
+        <div class="chart-title">Flujo mensual — últimos 6 meses</div>
+        <canvas id="chart" style="max-height:220px"></canvas>
+      </div>
+    </div>`;
+}
+
+function iChart() {
+  const ctx = document.getElementById('chart'); if (!ctx) return;
+  const now = new Date(), md = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const m = d.getMonth(), y = d.getFullYear();
+    const ing = DB.v.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0);
+    const eg  = DB.l.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0)
+              + DB.g.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.monto,0);
+    md.push({mes: MN[m], ing, eg});
+  }
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: md.map(x=>x.mes),
+      datasets: [
+        {label:'Ingresos', data:md.map(x=>x.ing), backgroundColor:'rgba(22,163,74,.75)', borderRadius:5, borderSkipped:false},
+        {label:'Egresos',  data:md.map(x=>x.eg),  backgroundColor:'rgba(217,119,6,.75)',  borderRadius:5, borderSkipped:false},
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font:{size:12}, boxWidth:12 } } },
+      scales: {
+        x: { ticks:{font:{size:12}}, grid:{display:false} },
+        y: { ticks:{font:{size:12}, callback:v=>ARS(v)}, grid:{color:'rgba(0,0,0,.04)'} }
+      }
+    }
+  });
+}
+
+// ─── PRODUCTOS ────────────────────────────────────────────────────────────────
+function vProd() {
+  const rows = DB.p.map(p => {
+    const st = stockProd(p);
+    const mg = st.cp > 0 ? (p.precioVenta - st.cp) / st.cp * 100 : 0;
+    const sc = st.stock <= 0 ? 'red' : (p.stockMin > 0 && st.stock <= p.stockMin) ? 'amber' : 'green';
+    return `<tr>
+      <td><strong>${p.nombre}</strong>${p.descripcion?`<br><span style="font-size:11px;color:var(--text3)">${p.descripcion}</span>`:''}</td>
+      <td>${p.unidad||'—'}</td>
+      <td><span class="badge badge-${sc}">${st.stock}</span></td>
+      <td class="mono">${ARS(st.cp)}</td>
+      <td class="mono">${ARS(p.precioVenta||0)}</td>
+      <td class="mono" style="color:${mg>0?'var(--green)':'var(--red)'}">${mg.toFixed(0)}%</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="oEditP('${p.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="dProd('${p.id}')">Eliminar</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Productos</div><div class="page-sub">${DB.p.length} producto${DB.p.length!==1?'s':''} registrado${DB.p.length!==1?'s':''}</div></div>
+      <button class="btn btn-primary" onclick="oNewP()">+ Nuevo producto</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Nombre</th><th>Unidad</th><th>Stock</th><th>Costo prom.</th><th>P. venta</th><th>Margen</th><th></th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="7"><div class="empty"><div class="empty-icon">▦</div><div class="empty-text">Sin productos. Agregá el primero.</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function pBody(x) {
+  x = x || {};
+  return `
+    <div class="grid2">
+      <div class="field span2"><label>Nombre *</label><input id="p-n" value="${x.nombre||''}" placeholder="Ej: Herbicida glifosato 1L"></div>
+      <div class="field"><label>Unidad</label><select id="p-u">${UNIS.map(u=>`<option${x.unidad===u?' selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Precio de venta ($)</label><input type="number" id="p-pv" value="${x.precioVenta||0}" min="0"></div>
+      <div class="field"><label>Costo base referencial ($)</label><input type="number" id="p-cb" value="${x.costoBase||0}" min="0"></div>
+      <div class="field"><label>Stock mínimo (alerta)</label><input type="number" id="p-sm" value="${x.stockMin||5}" min="0"></div>
+      <div class="field span2"><label>Descripción (opcional)</label><input id="p-d" value="${x.descripcion||''}" placeholder="Detalles adicionales"></div>
+    </div>`;
+}
+
+function oNewP()      { mOpen('Nuevo producto', pBody(), 'saveProd(null)'); }
+function oEditP(id)   { const x = DB.p.find(p=>p.id===id); if(x) mOpen('Editar producto', pBody(x), `saveProd('${id}')`); }
+
+function saveProd(id) {
+  const n = document.getElementById('p-n').value.trim();
+  if (!n) return alert('El nombre es requerido');
+  const x = {
+    id: id||uid(), nombre: n,
+    unidad: document.getElementById('p-u').value,
+    precioVenta: +document.getElementById('p-pv').value,
+    costoBase: +document.getElementById('p-cb').value,
+    stockMin: +document.getElementById('p-sm').value,
+    descripcion: document.getElementById('p-d').value
+  };
+  if (id) DB.p = DB.p.map(p => p.id===id ? x : p); else DB.p.push(x);
+  dbSave('p'); mClose(); rview();
+}
+
+function dProd(id) {
+  if (!confirm('¿Eliminar este producto?')) return;
+  DB.p = DB.p.filter(p => p.id !== id); dbSave('p'); rview();
+}
+
+// ─── LOTES ────────────────────────────────────────────────────────────────────
+function buildLotBody() {
+  const items = lI.map((it,i) => `
+    <div class="item-row">
+      <select onchange="slLI(${i},this.value)">
+        <option value="">— producto —</option>
+        ${DB.p.map(p=>`<option value="${p.id}"${it.pid===p.id?' selected':''}>${p.nombre}</option>`).join('')}
+      </select>
+      <input type="number" value="${it.qty}" min="1" placeholder="Cant." oninput="lI[${i}].qty=+this.value">
+      <input type="number" value="${it.costo}" min="0" placeholder="$/u" oninput="lI[${i}].costo=+this.value">
+      <button onclick="dLI(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:20px;line-height:1">×</button>
+    </div>`).join('');
+  const tot = lI.reduce((s,i) => s + i.qty * i.costo, 0);
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="l-f" value="${lF.fecha||hoy()}" oninput="lF.fecha=this.value"></div>
+      <div class="field"><label>Proveedor</label><input id="l-p" value="${lF.prov||''}" oninput="lF.prov=this.value" placeholder="Nombre del proveedor"></div>
+      <div class="field"><label>Estado</label>
+        <select oninput="lF.est=this.value">
+          <option value="pagado"${lF.est!=='pendiente'?' selected':''}>Pagado</option>
+          <option value="pendiente"${lF.est==='pendiente'?' selected':''}>Pendiente</option>
+        </select>
+      </div>
+      <div class="field"><label>Notas</label><input value="${lF.notas||''}" oninput="lF.notas=this.value" placeholder="Observaciones"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
+      <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Productos del lote</span>
+      <button class="btn btn-sm" onclick="aLI()">+ Agregar fila</button>
+    </div>
+    <div id="lot-items">${items}</div>
+    <div class="item-total">Total lote: ${ARS(tot)}</div>`;
+}
+
+function refreshLotModal(title, fn) {
+  document.getElementById('modal-box').innerHTML = mHtml(title, buildLotBody(), fn);
+}
+
+function vLot() {
+  const rows = [...DB.l].reverse().map(l => `<tr>
+    <td>${fmtD(l.fecha)}</td>
+    <td>${l.proveedor||'—'}</td>
+    <td style="font-size:12px;color:var(--text2)">${(l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return`${i.qty}× ${p?p.nombre:'?'}`;}).join(', ')}</td>
+    <td class="mono">${ARS(l.total)}</td>
+    <td><span class="badge badge-${l.estado==='pagado'?'green':'amber'}">${l.estado}</span></td>
+    <td><button class="btn btn-sm btn-danger" onclick="dLot('${l.id}')">Eliminar</button></td>
+  </tr>`).join('');
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Compras / Lotes</div><div class="page-sub">Registro de compras de mercadería por lote</div></div>
+      <button class="btn btn-primary" onclick="oNewL()">+ Nuevo lote</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Proveedor</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="6"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function oNewL() {
+  lF = {fecha:hoy(), prov:'', est:'pagado', notas:''};
+  lI = [{pid:'', qty:1, costo:0}];
+  mOpen('Nuevo lote de compra', buildLotBody(), 'saveLot()');
+}
+function aLI()       { lI.push({pid:'', qty:1, costo:0}); refreshLotModal('Nuevo lote de compra','saveLot()'); }
+function dLI(i)      { lI.splice(i,1); refreshLotModal('Nuevo lote de compra','saveLot()'); }
+function slLI(i,pid) {
+  lI[i].pid = pid;
+  const p = DB.p.find(x=>x.id===pid);
+  if (p && p.costoBase) lI[i].costo = p.costoBase;
+  refreshLotModal('Nuevo lote de compra','saveLot()');
+}
+
+function saveLot() {
+  if (lI.some(i=>!i.pid)) return alert('Seleccioná un producto en cada fila');
+  DB.l.push({id:uid(), fecha:lF.fecha||hoy(), proveedor:lF.prov, estado:lF.est, notas:lF.notas, items:[...lI], total:lI.reduce((s,i)=>s+i.qty*i.costo,0)});
+  dbSave('l'); mClose(); rview();
+}
+function dLot(id) {
+  if (!confirm('¿Eliminar este lote?')) return;
+  DB.l = DB.l.filter(x=>x.id!==id); dbSave('l'); rview();
+}
+
+// ─── VENTAS ───────────────────────────────────────────────────────────────────
+function buildVentBody() {
+  const aps = DB.p.map(p => ({...p, ...stockProd(p)}));
+  const items = vI.map((it,i) => `
+    <div class="item-row">
+      <select onchange="uvI(${i},this.value)">
+        <option value="">— producto —</option>
+        ${aps.map(p=>`<option value="${p.id}"${it.pid===p.id?' selected':''}>${p.nombre} (stk: ${p.stock})</option>`).join('')}
+      </select>
+      <input type="number" value="${it.qty}" min="1" placeholder="Cant." oninput="vI[${i}].qty=+this.value">
+      <input type="number" value="${it.precio}" min="0" placeholder="$/u" oninput="vI[${i}].precio=+this.value">
+      <button onclick="dVI(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:20px;line-height:1">×</button>
+    </div>`).join('');
+  const tot = vI.reduce((s,i) => s + i.qty * i.precio, 0);
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" value="${vF.fecha||hoy()}" oninput="vF.fecha=this.value"></div>
+      <div class="field"><label>Cliente</label><input value="${vF.cli||''}" oninput="vF.cli=this.value" placeholder="Nombre del cliente"></div>
+      <div class="field"><label>Estado</label>
+        <select oninput="vF.est=this.value">
+          <option value="cobrado"${vF.est!=='pendiente'?' selected':''}>Cobrado</option>
+          <option value="pendiente"${vF.est==='pendiente'?' selected':''}>Pendiente / Cta. cte.</option>
+        </select>
+      </div>
+      <div class="field"><label>Notas</label><input value="${vF.notas||''}" oninput="vF.notas=this.value" placeholder="Observaciones"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
+      <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Productos vendidos</span>
+      <button class="btn btn-sm" onclick="aVI()">+ Agregar fila</button>
+    </div>
+    <div>${items}</div>
+    <div class="item-total">Total venta: ${ARS(tot)}</div>`;
+}
+
+function refreshVentModal() {
+  document.getElementById('modal-box').innerHTML = mHtml('Nueva venta', buildVentBody(), 'saveVent()');
+}
+
+function uvI(i,pid) {
+  vI[i].pid = pid;
+  const p = DB.p.find(x=>x.id===pid);
+  if (p && p.precioVenta) vI[i].precio = p.precioVenta;
+  refreshVentModal();
+}
+
+function vVent() {
+  const pend = DB.v.filter(v=>v.estado==='pendiente').reduce((s,v)=>s+v.total,0);
+  const rows = [...DB.v].reverse().map(v => `<tr>
+    <td>${fmtD(v.fecha)}</td>
+    <td>${v.cliente||'—'}</td>
+    <td style="font-size:12px;color:var(--text2)">${(v.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return`${i.qty}× ${p?p.nombre:'?'}`;}).join(', ')}</td>
+    <td class="mono" style="color:var(--green)">${ARS(v.total)}</td>
+    <td><span class="badge badge-${v.estado==='cobrado'?'green':'amber'}">${v.estado}</span></td>
+    <td><button class="btn btn-sm btn-danger" onclick="dVent('${v.id}')">Eliminar</button></td>
+  </tr>`).join('');
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Ventas</div>
+        <div class="page-sub">${pend>0?`<span style="color:var(--amber)">Pendiente de cobro: ${ARS(pend)}</span>`:'Todas las ventas al día'}</div>
+      </div>
+      <button class="btn btn-primary" onclick="oNewV()">+ Nueva venta</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="6"><div class="empty"><div class="empty-icon">◎</div><div class="empty-text">Sin ventas registradas</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function oNewV() {
+  vF = {fecha:hoy(), cli:'', est:'cobrado', notas:''};
+  vI = [{pid:'', qty:1, precio:0}];
+  mOpen('Nueva venta', buildVentBody(), 'saveVent()');
+}
+function aVI()  { vI.push({pid:'', qty:1, precio:0}); refreshVentModal(); }
+function dVI(i) { vI.splice(i,1); refreshVentModal(); }
+
+function saveVent() {
+  if (vI.some(i=>!i.pid)) return alert('Seleccioná un producto en cada fila');
+  const aps = DB.p.map(p => ({...p, ...stockProd(p)}));
+  for (const it of vI) {
+    const p = aps.find(x=>x.id===it.pid);
+    if (p && p.stock < it.qty) return alert(`Stock insuficiente para "${p.nombre}" (disponible: ${p.stock})`);
+  }
+  DB.v.push({id:uid(), fecha:vF.fecha||hoy(), cliente:vF.cli, estado:vF.est, notas:vF.notas, items:[...vI], total:vI.reduce((s,i)=>s+i.qty*i.precio,0)});
+  dbSave('v'); mClose(); rview();
+}
+function dVent(id) {
+  if (!confirm('¿Eliminar esta venta?')) return;
+  DB.v = DB.v.filter(x=>x.id!==id); dbSave('v'); rview();
+}
+
+// ─── GASTOS ───────────────────────────────────────────────────────────────────
+function vGast() {
+  const now = new Date();
+  const tm = DB.g.filter(g=>{const d=new Date(g.fecha);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();}).reduce((s,g)=>s+g.monto,0);
+  const rows = [...DB.g].reverse().map(g => `<tr>
+    <td>${fmtD(g.fecha)}</td>
+    <td><span class="badge badge-blue">${g.categoria}</span></td>
+    <td>${g.descripcion}</td>
+    <td class="mono" style="color:var(--amber)">${ARS(g.monto)}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="dGas('${g.id}')">Eliminar</button></td>
+  </tr>`).join('');
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Gastos operativos</div>
+        <div class="page-sub">Este mes: <strong style="color:var(--amber)">${ARS(tm)}</strong></div>
+      </div>
+      <button class="btn btn-primary" onclick="oNewG()">+ Nuevo gasto</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin gastos registrados</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function oNewG() {
+  mOpen('Nuevo gasto', `
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="g-f" value="${hoy()}"></div>
+      <div class="field"><label>Monto ($)</label><input type="number" id="g-m" min="0" value="0"></div>
+      <div class="field"><label>Categoría</label><select id="g-c">${CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Descripción *</label><input id="g-d" placeholder="Detalle del gasto"></div>
+    </div>`, 'saveGas()');
+}
+
+function saveGas() {
+  const d = document.getElementById('g-d').value.trim();
+  const m = +document.getElementById('g-m').value;
+  if (!d || !m) return alert('Completá descripción y monto');
+  DB.g.push({id:uid(), fecha:document.getElementById('g-f').value, categoria:document.getElementById('g-c').value, descripcion:d, monto:m});
+  dbSave('g'); mClose(); rview();
+}
+function dGas(id) {
+  if (!confirm('¿Eliminar este gasto?')) return;
+  DB.g = DB.g.filter(x=>x.id!==id); dbSave('g'); rview();
+}
+
+// ─── FLUJO DE CAJA ────────────────────────────────────────────────────────────
+function vCaja() {
+  const all = [
+    ...DB.v.map(v => ({fecha:v.fecha, tipo:'i', con:`Venta${v.cliente?` — ${v.cliente}`:''}`, monto:v.total})),
+    ...DB.l.map(l => ({fecha:l.fecha, tipo:'e', con:`Compra${l.proveedor?` — ${l.proveedor}`:''}`, monto:l.total})),
+    ...DB.g.map(g => ({fecha:g.fecha, tipo:'e', con:`${g.categoria}: ${g.descripcion}`, monto:g.monto})),
+  ].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+
+  const saldo = all.reduce((s,m) => m.tipo==='i' ? s+m.monto : s-m.monto, 0);
+  let run = saldo;
+  all.forEach(m => { m.sal = run; run -= m.tipo==='i' ? m.monto : -m.monto; });
+
+  const rows = all.map(m => `<tr>
+    <td>${fmtD(m.fecha)}</td>
+    <td><span class="badge badge-${m.tipo==='i'?'green':'amber'}">${m.tipo==='i'?'▲ Ingreso':'▼ Egreso'}</span></td>
+    <td style="font-size:12px">${m.con}</td>
+    <td class="mono" style="color:${m.tipo==='i'?'var(--green)':'var(--amber)'}">${m.tipo==='e'?'−':''}${ARS(m.monto)}</td>
+    <td class="mono" style="color:${m.sal>=0?'var(--text)':'var(--red)'}">${ARS(m.sal)}</td>
+  </tr>`).join('');
+
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Flujo de caja</div><div class="page-sub">Todos los movimientos de dinero</div></div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 16px;text-align:right">
+        <div style="font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.4px">Saldo actual</div>
+        <div class="mono" style="font-size:20px;font-weight:600;color:${saldo>=0?'var(--green)':'var(--red)'}">${ARS(saldo)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Saldo acum.</th></tr></thead>
+          <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">⇌</div><div class="empty-text">Sin movimientos</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ─── RESULTADOS ───────────────────────────────────────────────────────────────
+function vRes() {
+  const now = new Date();
+  function flt(arr, dk) {
+    if (rPer==='mes')  return arr.filter(x=>{const d=new Date(x[dk]);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+    if (rPer==='anio') return arr.filter(x=>new Date(x[dk]).getFullYear()===now.getFullYear());
+    return arr;
+  }
+  const fv = flt(DB.v,'fecha'), fg = flt(DB.g,'fecha');
+  const ing  = fv.reduce((s,v)=>s+v.total,0);
+  const aps  = DB.p.map(p=>({...p,...stockProd(p)}));
+  const cmv  = fv.flatMap(v=>v.items||[]).reduce((s,it)=>{const p=aps.find(x=>x.id===it.pid);return s+it.qty*(p?.cp||0);},0);
+  const mb   = ing - cmv;
+  const gop  = fg.reduce((s,g)=>s+g.monto,0);
+  const neto = mb - gop;
+  const pct  = (n,d) => d>0 ? (n/d*100).toFixed(1)+'%' : '—';
+
+  const catRows = CATS.map(cat => {
+    const t = fg.filter(g=>g.categoria===cat).reduce((s,g)=>s+g.monto,0);
+    if (!t) return '';
+    return `<div style="display:flex;justify-content:space-between;padding:5px 0 5px 1.25rem">
+      <span style="font-size:12px;color:var(--text2)">${cat}</span>
+      <span class="mono" style="font-size:12px;color:var(--text2)">${ARS(t)}</span>
+    </div>`;
+  }).join('');
+
+  function rrow(l, v, c) {
+    return `<div class="res-row">
+      <span class="label">${l}</span>
+      <div><span class="val" style="color:${c}">${ARS(v)}</span><span class="pct">${pct(v,ing)}</span></div>
+    </div>`;
+  }
+
+  const lbl = {mes:'Mes actual', anio:'Año actual', total:'Acumulado total'}[rPer];
+
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Estado de resultados</div><div class="page-sub">${lbl}</div></div>
+      <div style="display:flex;gap:6px">
+        ${[{v:'mes',l:'Este mes'},{v:'anio',l:'Este año'},{v:'total',l:'Total'}].map(o=>
+          `<button class="btn-seg${rPer===o.v?' active':''}" onclick="rPer='${o.v}';rview()">${o.l}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="card" style="max-width:580px">
+      <div style="padding:1.25rem">
+        ${rrow('Ventas totales', ing, 'var(--green)')}
+        ${rrow('Costo de mercadería vendida (CMV)', cmv, 'var(--amber)')}
+        <div class="res-row" style="border-top:2px solid var(--border)">
+          <span class="label" style="font-weight:600">Margen bruto</span>
+          <div><span class="val" style="font-size:16px;color:${mb>=0?'var(--green)':'var(--red)'}">${ARS(mb)}</span><span class="pct">${pct(mb,ing)}</span></div>
+        </div>
+        ${rrow('Gastos operativos', gop, 'var(--amber)')}
+        ${catRows}
+        <div class="res-total ${neto>=0?'pos':'neg'}">
+          <span class="label">Resultado neto</span>
+          <div><span class="val">${ARS(neto)}</span><span style="font-size:12px;margin-left:8px">${pct(neto,ing)}</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+function mHtml(title, body, saveFn) {
+  return `
+    <div class="modal-header">
+      <span class="modal-title">${title}</span>
+      <button class="modal-close" onclick="mClose()">×</button>
+    </div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="mClose()">Cancelar</button>
+      <button class="btn btn-primary" onclick="${saveFn}">Guardar</button>
+    </div>`;
+}
+function mOpen(title, body, saveFn) {
+  document.getElementById('modal-box').innerHTML = mHtml(title, body, saveFn);
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function mClose() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) mClose();
+});
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+dbLoad();
+rnav();
+rview();
+</script>
+</body>
+</html>
