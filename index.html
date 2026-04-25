@@ -692,11 +692,10 @@ function pBody(x) {
       <div class="field span2"><label>Nombre *</label><input id="p-n" value="${x.nombre||''}" placeholder="Ej: Ottocast Mini"></div>
       <div class="field"><label>Unidad</label><select id="p-u">${UNIS.map(u=>`<option${x.unidad===u?' selected':''}>${u}</option>`).join('')}</select></div>
       <div class="field"><label>Precio de venta ($)</label><input type="number" id="p-pv" value="${x.precioVenta||0}" min="0"></div>
-      <div class="field"><label>Costo base referencial ($)</label><input type="number" id="p-cb" value="${x.costoBase||0}" min="0"></div>
       <div class="field span2"><label>Descripción (opcional)</label><input id="p-d" value="${x.descripcion||''}" placeholder="Detalles adicionales"></div>
     </div>
     <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;font-size:12px;color:var(--text2)">
-      ℹ El stock mínimo se calcula automáticamente según el historial de ventas de los últimos 90 días con cobertura de 45 días (lead time China).
+      ℹ El costo unitario y stock mínimo se calculan automáticamente desde los lotes de compra.
     </div>`;
 }
 
@@ -710,7 +709,6 @@ function saveProd(id) {
     id: id||uid(), nombre: n,
     unidad:      document.getElementById('p-u').value,
     precioVenta: +document.getElementById('p-pv').value,
-    costoBase:   +document.getElementById('p-cb').value,
     descripcion: document.getElementById('p-d').value
   };
   if (id) DB.p = DB.p.map(p => p.id===id ? x : p); else DB.p.push(x);
