@@ -369,8 +369,8 @@ const MEDIOS_COBRO = ['Transferencia','Efectivo','Débito','Crédito','Mercado P
 const CATS_OP = ['Flete/Envío','Alquiler','Servicios','Personal','Publicidad','Materiales','Varios'];
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos', u:'gp_usd'};
-let DB = {p:[], l:[], v:[], g:[], u:[]};
+const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos', u:'gp_usd', d:'gp_dev'};
+let DB = {p:[], l:[], v:[], g:[], u:[], d:[]};
 
 function dbLoad() {
   for (const [k, sk] of Object.entries(SK)) {
@@ -403,29 +403,31 @@ async function fetchTC() {
 
 // ─── STOCK CALC ───────────────────────────────────────────────────────────────
 function stockProd(prod) {
-  const li = DB.l.flatMap(l => l.items||[]).filter(i => i.pid === prod.id);
-  // soporta formato nuevo (pid+cantidad) y viejo (items[])
-  const vi = DB.v.filter(v => v.pid === prod.id)
-    .map(v => ({qty: v.cantidad||0}))
-    .concat(DB.v.flatMap(v => (v.items||[]).filter(i=>i.pid===prod.id&&!v.pid)));
+  const li  = DB.l.flatMap(l => l.items||[]).filter(i => i.pid === prod.id);
+  const vi  = DB.v.filter(v => v.pid === prod.id).map(v => ({qty: v.cantidad||0}))
+              .concat(DB.v.flatMap(v => (v.items||[]).filter(i=>i.pid===prod.id&&!v.pid)));
+  // devoluciones vuelven al stock
+  const di  = (DB.d||[]).filter(d => d.pid === prod.id).reduce((s,d)=>s+(d.cantidad||1),0);
   const qty  = li.reduce((s,i) => s + i.qty, 0);
   const cost = li.reduce((s,i) => s + i.qty * i.costo, 0);
+  const vendido = vi.reduce((s,i) => s + i.qty, 0);
   return {
-    stock: qty - vi.reduce((s,i) => s + i.qty, 0),
+    stock: qty - vendido + di,
     cp: qty > 0 ? cost / qty : (prod.costoBase || 0)
   };
 }
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
 let view = 'dashboard', rPer = '6m', chart = null;
-let lF = {}, lI = [], vF = {};
+let lF = {}, lI = [], vF = {}, devF = {};
 
 const NAVS = [
   {id:'dashboard', icon:'◈', l:'Dashboard'},
   {id:'p',         icon:'▦', l:'Productos'},
   {id:'l',         icon:'⊞', l:'Compras / Lotes'},
   {id:'v',         icon:'◎', l:'Ventas'},
-  {id:'g',         icon:'◇', l:'Gastos'},
+  {id:'dev',       icon:'↩', l:'Devoluciones'},
+  {id:'g',         icon:'◇', l:'Gastos / Ingresos'},
   {id:'usd',       icon:'$', l:'Movimientos USD'},
   {id:'caja',      icon:'⇌', l:'Flujo de caja'},
   {id:'res',       icon:'≡', l:'Resultados'},
@@ -444,23 +446,46 @@ function go(v2) { view = v2; rnav(); rview(); }
 
 function rview() {
   if (chart) { chart.destroy(); chart = null; }
-  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, g:vGast, usd:vUsd, caja:vCaja, res:vRes, cfg:vCfg};
+  const mp = {dashboard:vDash, p:vProd, l:vLot, v:vVent, dev:vDev, g:vGast, usd:vUsd, caja:vCaja, res:vRes, cfg:vCfg};
   document.getElementById('main').innerHTML = (mp[view] || vDash)();
   if (view === 'dashboard') setTimeout(iChart, 50);
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function vDash() {
-  const tv = DB.v.reduce((s,v) => s + v.total, 0);
-  const tc = DB.l.reduce((s,l) => s + l.total, 0);
-  const tg = DB.g.reduce((s,g) => s + g.monto, 0);
-  const neto = tv - tc - tg;
-  const sv = DB.p.reduce((s,p) => { const st = stockProd(p); return s + st.stock * st.cp; }, 0);
+let dashPer = 'mes';
+
+function dashFilter(arr, dk) {
   const now = new Date();
-  const tvm = DB.v.filter(v => {
-    const d = new Date(v.fecha); return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
-  }).reduce((s,v) => s + v.total, 0);
-  const low = DB.p.map(p => ({...p, ...stockProd(p)})).filter(x => x.stock <= 0 || (x.stockMin > 0 && x.stock <= x.stockMin));
+  if (dashPer === 'semana') {
+    const lun = new Date(now);
+    lun.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1));
+    lun.setHours(0,0,0,0);
+    return arr.filter(x => new Date(x[dk]) >= lun);
+  }
+  if (dashPer === 'mes') {
+    return arr.filter(x => { const d=new Date(x[dk]); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
+  }
+  if (dashPer === 'anio') {
+    return arr.filter(x => new Date(x[dk]).getFullYear()===now.getFullYear());
+  }
+  return arr;
+}
+
+function vDash() {
+  const sv   = DB.p.reduce((s,p) => { const st=stockProd(p); return s+st.stock*st.cp; }, 0);
+  const low  = DB.p.map(p=>({...p,...stockProd(p)})).filter(x=>x.stock<=0||(stockMinSugerido(x)>0&&x.stock<=stockMinSugerido(x)));
+  const fv   = dashFilter(DB.v, 'fecha');
+  const fl   = dashFilter(DB.l, 'fecha');
+  const fg   = dashFilter(DB.g, 'fecha');
+  const ventas  = fv.reduce((s,v)=>s+(v.facturacion??v.total??0),0);
+  const compras = fl.reduce((s,l)=>s+l.total,0);
+  const gastos  = fg.filter(g=>g.categoria!=='Tasa').reduce((s,g)=>s+g.monto,0);
+  const tasa    = fg.filter(g=>g.categoria==='Tasa').reduce((s,g)=>s+g.monto,0);
+  const cmv     = fv.reduce((s,v)=>s+(v.costoU&&v.cantidad?v.costoU*v.cantidad:0),0);
+  const neto    = ventas - cmv - gastos + tasa;
+  const unidades = fv.reduce((s,v)=>s+(v.cantidad||1),0);
+  const ticketProm = fv.length>0 ? ventas/fv.length : 0;
+  const perLbl  = {semana:'Esta semana', mes:'Este mes', anio:'Este año'}[dashPer];
 
   const alertHtml = low.length ? `
     <div class="alert-strip">
@@ -473,11 +498,52 @@ function vDash() {
       <div><div class="page-title">Dashboard</div><div class="page-sub">Resumen general del negocio</div></div>
     </div>
     ${alertHtml}
-    <div class="metric-grid">
-      <div class="metric"><div class="metric-label">Valor en stock</div><div class="metric-value blue">${ARS(sv)}</div></div>
-      <div class="metric"><div class="metric-label">Ventas este mes</div><div class="metric-value green">${ARS(tvm)}</div></div>
-      <div class="metric"><div class="metric-label">Total egresos</div><div class="metric-value amber">${ARS(tc+tg)}</div></div>
-      <div class="metric"><div class="metric-label">Resultado neto</div><div class="metric-value ${neto>=0?'green':'red'}">${ARS(neto)}</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem">
+      <div class="metric">
+        <div class="metric-label">Valor en stock</div>
+        <div class="metric-value blue">${ARS(sv)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Acumulado total</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Ticket promedio</div>
+        <div class="metric-value blue">${ARS(ticketProm)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl} · ${fv.length} venta${fv.length!==1?'s':''}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <span style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Resumen — ${perLbl}</span>
+      <div style="display:flex;gap:6px">
+        ${[{v:'semana',l:'Semana'},{v:'mes',l:'Mes'},{v:'anio',l:'Año'}].map(o=>
+          `<button class="btn-seg${dashPer===o.v?' active':''}" onclick="dashPer='${o.v}';rview()">${o.l}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="metric-grid" style="margin-bottom:1.5rem">
+      <div class="metric">
+        <div class="metric-label">Facturación neta</div>
+        <div class="metric-value green">${ARS(ventas)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Unidades vendidas</div>
+        <div class="metric-value blue" style="font-size:28px">${unidades}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Compras</div>
+        <div class="metric-value amber">${ARS(compras)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Gastos operativos</div>
+        <div class="metric-value amber">${ARS(gastos)}${tasa>0?` <span style="font-size:12px;color:var(--green)">+${ARS(tasa)}</span>`:''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl}${tasa>0?' · incl. tasa':''}</div>
+      </div>
+      <div class="metric" style="grid-column:span 2">
+        <div class="metric-label">Resultado neto</div>
+        <div class="metric-value ${neto>=0?'green':'red'}">${ARS(neto)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${perLbl}</div>
+      </div>
     </div>
     <div class="card">
       <div class="chart-wrap">
@@ -519,15 +585,61 @@ function iChart() {
 }
 
 // ─── PRODUCTOS ────────────────────────────────────────────────────────────────
+// Calcula stock mínimo sugerido basado en historial de 90 días y cobertura de 45 días
+function stockMinSugerido(prod) {
+  const ahora  = new Date();
+  const desde  = new Date(ahora); desde.setDate(ahora.getDate() - 90);
+  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha)>=desde);
+  const unids  = ventas.reduce((s,v)=>s+(v.cantidad||1),0);
+  const promDiario = unids / 90;
+  return Math.ceil(promDiario * 45); // 45 días de cobertura
+}
+
+// Días de stock restantes al ritmo actual
+function diasStock(prod, stockActual) {
+  const ahora = new Date();
+  const desde = new Date(ahora); desde.setDate(ahora.getDate() - 90);
+  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha)>=desde);
+  const unids  = ventas.reduce((s,v)=>s+(v.cantidad||1),0);
+  const promDiario = unids / 90;
+  if (!promDiario) return null;
+  return Math.floor(stockActual / promDiario);
+}
+
 function vProd() {
   const rows = DB.p.map(p => {
-    const st = stockProd(p);
-    const mg = st.cp > 0 ? (p.precioVenta - st.cp) / st.cp * 100 : 0;
-    const sc = st.stock <= 0 ? 'red' : (p.stockMin > 0 && st.stock <= p.stockMin) ? 'amber' : 'green';
-    return `<tr>
-      <td><strong>${p.nombre}</strong>${p.descripcion?`<br><span style="font-size:11px;color:var(--text3)">${p.descripcion}</span>`:''}</td>
+    const st     = stockProd(p);
+    const mg     = st.cp > 0 ? (p.precioVenta - st.cp) / st.cp * 100 : 0;
+    const minSug = stockMinSugerido(p);
+    const dias   = diasStock(p, st.stock);
+
+    // Estado del stock
+    let sc, alarmHtml = '';
+    if (st.stock <= 0) {
+      sc = 'red';
+      alarmHtml = `<div style="font-size:11px;color:var(--red);margin-top:3px;font-weight:500">🔴 Sin stock</div>`;
+    } else if (minSug > 0 && st.stock <= minSug) {
+      sc = 'red';
+      alarmHtml = `<div style="font-size:11px;color:var(--red);margin-top:3px;font-weight:500">🔴 Stock crítico${dias!==null?` · ${dias} días restantes`:''}</div>`;
+    } else if (minSug > 0 && st.stock <= minSug * 1.5) {
+      sc = 'amber';
+      alarmHtml = `<div style="font-size:11px;color:var(--amber);margin-top:3px;font-weight:500">🟡 Pedido pronto${dias!==null?` · ${dias} días restantes`:''}</div>`;
+    } else {
+      sc = 'green';
+      if (dias !== null) alarmHtml = `<div style="font-size:11px;color:var(--text3);margin-top:3px">${dias} días de stock</div>`;
+    }
+
+    return `<tr style="${sc==='red'?'background:var(--red-bg)':sc==='amber'?'background:var(--amber-bg)':''}">
+      <td>
+        <strong>${p.nombre}</strong>
+        ${p.descripcion?`<br><span style="font-size:11px;color:var(--text3)">${p.descripcion}</span>`:''}
+      </td>
       <td>${p.unidad||'—'}</td>
-      <td><span class="badge badge-${sc}">${st.stock}</span></td>
+      <td>
+        <span class="badge badge-${sc}" style="font-size:13px;font-weight:700">${st.stock}</span>
+        ${alarmHtml}
+      </td>
+      <td class="mono" style="font-size:12px;color:var(--text2)">${minSug>0?minSug:'Sin historial'}</td>
       <td class="mono">${ARS(st.cp)}</td>
       <td class="mono">${ARS(p.precioVenta||0)}</td>
       <td class="mono" style="color:${mg>0?'var(--green)':'var(--red)'}">${mg.toFixed(0)}%</td>
@@ -540,16 +652,34 @@ function vProd() {
     </tr>`;
   }).join('');
 
+  // Alarmas activas
+  const criticos = DB.p.filter(p=>{const st=stockProd(p);const m=stockMinSugerido(p);return st.stock<=0||(m>0&&st.stock<=m);});
+  const alertHtml = criticos.length ? `
+    <div class="alert-strip" style="margin-bottom:1.25rem">
+      <div class="alert-strip-title">🔴 Stock crítico o agotado — pedido urgente recomendado</div>
+      <div class="alert-chips">${criticos.map(p=>{
+        const st=stockProd(p); const d=diasStock(p,st.stock);
+        return `<span class="badge badge-red">${p.nombre}: ${st.stock} ud${d!==null?` · ${d}d`:''}`;
+      }).join('')}</div>
+    </div>` : '';
+
   return `
     <div class="page-header">
-      <div><div class="page-title">Productos</div><div class="page-sub">${DB.p.length} producto${DB.p.length!==1?'s':''} registrado${DB.p.length!==1?'s':''}</div></div>
+      <div>
+        <div class="page-title">Productos</div>
+        <div class="page-sub">${DB.p.length} producto${DB.p.length!==1?'s':''} · Stock mínimo calculado sobre 90 días de ventas, cobertura 45 días</div>
+      </div>
       <button class="btn btn-primary" onclick="oNewP()">+ Nuevo producto</button>
     </div>
+    ${alertHtml}
     <div class="card">
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Unidad</th><th>Stock</th><th>Costo prom.</th><th>P. venta</th><th>Margen</th><th></th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7"><div class="empty"><div class="empty-icon">▦</div><div class="empty-text">Sin productos. Agregá el primero.</div></div></td></tr>`}</tbody>
+          <thead><tr>
+            <th>Nombre</th><th>Unidad</th><th>Stock actual</th>
+            <th>Mínimo sugerido</th><th>Costo prom.</th><th>P. venta</th><th>Margen</th><th></th>
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="8"><div class="empty"><div class="empty-icon">▦</div><div class="empty-text">Sin productos. Agregá el primero.</div></div></td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
@@ -559,27 +689,28 @@ function pBody(x) {
   x = x || {};
   return `
     <div class="grid2">
-      <div class="field span2"><label>Nombre *</label><input id="p-n" value="${x.nombre||''}" placeholder="Ej: Herbicida glifosato 1L"></div>
+      <div class="field span2"><label>Nombre *</label><input id="p-n" value="${x.nombre||''}" placeholder="Ej: Ottocast Mini"></div>
       <div class="field"><label>Unidad</label><select id="p-u">${UNIS.map(u=>`<option${x.unidad===u?' selected':''}>${u}</option>`).join('')}</select></div>
       <div class="field"><label>Precio de venta ($)</label><input type="number" id="p-pv" value="${x.precioVenta||0}" min="0"></div>
       <div class="field"><label>Costo base referencial ($)</label><input type="number" id="p-cb" value="${x.costoBase||0}" min="0"></div>
-      <div class="field"><label>Stock mínimo (alerta)</label><input type="number" id="p-sm" value="${x.stockMin||5}" min="0"></div>
       <div class="field span2"><label>Descripción (opcional)</label><input id="p-d" value="${x.descripcion||''}" placeholder="Detalles adicionales"></div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;font-size:12px;color:var(--text2)">
+      ℹ El stock mínimo se calcula automáticamente según el historial de ventas de los últimos 90 días con cobertura de 45 días (lead time China).
     </div>`;
 }
 
-function oNewP()      { mOpen('Nuevo producto', pBody(), 'saveProd(null)'); }
-function oEditP(id)   { const x = DB.p.find(p=>p.id===id); if(x) mOpen('Editar producto', pBody(x), `saveProd('${id}')`); }
+function oNewP()    { mOpen('Nuevo producto', pBody(), 'saveProd(null)'); }
+function oEditP(id) { const x = DB.p.find(p=>p.id===id); if(x) mOpen('Editar producto', pBody(x), `saveProd('${id}')`); }
 
 function saveProd(id) {
   const n = document.getElementById('p-n').value.trim();
   if (!n) return alert('El nombre es requerido');
   const x = {
     id: id||uid(), nombre: n,
-    unidad: document.getElementById('p-u').value,
+    unidad:      document.getElementById('p-u').value,
     precioVenta: +document.getElementById('p-pv').value,
-    costoBase: +document.getElementById('p-cb').value,
-    stockMin: +document.getElementById('p-sm').value,
+    costoBase:   +document.getElementById('p-cb').value,
     descripcion: document.getElementById('p-d').value
   };
   if (id) DB.p = DB.p.map(p => p.id===id ? x : p); else DB.p.push(x);
@@ -592,87 +723,216 @@ function dProd(id) {
 }
 
 // ─── LOTES ────────────────────────────────────────────────────────────────────
-function buildLotBody() {
-  const items = lI.map((it,i) => `
-    <div class="item-row">
-      <select onchange="slLI(${i},this.value)">
-        <option value="">— producto —</option>
-        ${DB.p.map(p=>`<option value="${p.id}"${it.pid===p.id?' selected':''}>${p.nombre}</option>`).join('')}
-      </select>
-      <input type="number" value="${it.qty}" min="1" placeholder="Cant." oninput="lI[${i}].qty=+this.value">
-      <input type="number" value="${it.costo}" min="0" placeholder="$/u" oninput="lI[${i}].costo=+this.value">
-      <button onclick="dLI(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:20px;line-height:1">×</button>
-    </div>`).join('');
-  const tot = lI.reduce((s,i) => s + i.qty * i.costo, 0);
+function calcLoteItem(it, tc) {
+  const cant        = +it.qty    || 0;
+  const alibaba     = +it.alibaba || 0; // USD por unidad
+  const envioChina  = +it.envioChina  || 0; // USD total
+  const impCompra   = +it.impCompra   || 0; // USD total
+  const impTarjeta  = +it.impTarjeta  || 0; // USD total
+  const impImport   = +it.impImport   || 0; // USD total
+  const totalUSD    = (alibaba * cant) + envioChina + impCompra + impTarjeta + impImport;
+  const unitUSD     = cant > 0 ? totalUSD / cant : 0;
+  const totalARS    = totalUSD * (tc || 0);
+  const unitARS     = cant > 0 ? totalARS / cant : 0;
+  return {cant, alibaba, envioChina, impCompra, impTarjeta, impImport, totalUSD, unitUSD, totalARS, unitARS};
+}
+
+function recalcLotRow(i) {
+  const tc  = +lF.tc || 0;
+  const it  = lI[i];
+  const c   = calcLoteItem(it, tc);
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
+  set(`li-tusd-${i}`,  c.totalUSD.toFixed(2));
+  set(`li-uusd-${i}`,  c.unitUSD.toFixed(2));
+  set(`li-tars-${i}`,  Math.round(c.totalARS).toLocaleString('es-AR'));
+  set(`li-uars-${i}`,  Math.round(c.unitARS).toLocaleString('es-AR'));
+  // actualizar costo para stockProd (en ARS por unidad)
+  lI[i].costo = c.unitARS;
+}
+
+function recalcAllLot() { lI.forEach((_,i)=>recalcLotRow(i)); }
+
+function lotItemRow(it, i) {
   return `
-    <div class="grid2">
-      <div class="field"><label>Fecha</label><input type="date" id="l-f" value="${lF.fecha||hoy()}" oninput="lF.fecha=this.value"></div>
-      <div class="field"><label>Nº de Lote</label><input id="l-nro" value="${lF.nro||''}" oninput="lF.nro=this.value" placeholder="Ej: L-001"></div>
-      <div class="field"><label>Proveedor</label><input id="l-p" value="${lF.prov||''}" oninput="lF.prov=this.value" placeholder="Nombre del proveedor"></div>
+  <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:12px;font-weight:600;color:var(--text2)">Producto ${i+1}</span>
+      <button onclick="dLI(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:18px;line-height:1">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;margin-bottom:10px">
+      <div class="field" style="margin:0"><label>Producto *</label>
+        <select onchange="slLI(${i},this.value)">
+          <option value="">— seleccionar —</option>
+          ${DB.p.map(p=>`<option value="${p.id}"${it.pid===p.id?' selected':''}>${p.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="margin:0"><label>Cantidad</label>
+        <input type="number" id="li-qty-${i}" value="${it.qty||1}" min="1"
+          oninput="lI[${i}].qty=+this.value;recalcLotRow(${i})">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      <div class="field" style="margin:0"><label>Alibaba (USD/u)</label>
+        <input type="number" id="li-ali-${i}" value="${it.alibaba||''}" min="0" step="0.01" placeholder="0.00"
+          oninput="lI[${i}].alibaba=+this.value;recalcLotRow(${i})">
+      </div>
+      <div class="field" style="margin:0"><label>Envío China (USD)</label>
+        <input type="number" id="li-env-${i}" value="${it.envioChina||''}" min="0" step="0.01" placeholder="0.00"
+          oninput="lI[${i}].envioChina=+this.value;recalcLotRow(${i})">
+      </div>
+      <div class="field" style="margin:0"><label>Imp. Compra (USD)</label>
+        <input type="number" id="li-ic-${i}" value="${it.impCompra||''}" min="0" step="0.01" placeholder="0.00"
+          oninput="lI[${i}].impCompra=+this.value;recalcLotRow(${i})">
+      </div>
+      <div class="field" style="margin:0"><label>Imp. Tarjeta (USD)</label>
+        <input type="number" id="li-it-${i}" value="${it.impTarjeta||''}" min="0" step="0.01" placeholder="0.00"
+          oninput="lI[${i}].impTarjeta=+this.value;recalcLotRow(${i})">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr repeat(4,1fr);gap:8px">
+      <div class="field" style="margin:0"><label>Imp. Importación (USD)</label>
+        <input type="number" id="li-ii-${i}" value="${it.impImport||''}" min="0" step="0.01" placeholder="0.00"
+          oninput="lI[${i}].impImport=+this.value;recalcLotRow(${i})">
+      </div>
+      <div class="field" style="margin:0"><label>Total USD</label>
+        <input id="li-tusd-${i}" readonly value="${it.totalUSD?it.totalUSD.toFixed(2):''}"
+          style="background:transparent;border-color:var(--brand-border);color:var(--brand);font-family:var(--font-mono);font-weight:600">
+      </div>
+      <div class="field" style="margin:0"><label>Unit. USD</label>
+        <input id="li-uusd-${i}" readonly value="${it.unitUSD?it.unitUSD.toFixed(2):''}"
+          style="background:transparent;border-color:var(--brand-border);color:var(--brand);font-family:var(--font-mono);font-weight:600">
+      </div>
+      <div class="field" style="margin:0"><label>Total ARS</label>
+        <input id="li-tars-${i}" readonly value="${it.totalARS?Math.round(it.totalARS).toLocaleString('es-AR'):''}"
+          style="background:transparent;border-color:var(--green-border);color:var(--green);font-family:var(--font-mono);font-weight:600">
+      </div>
+      <div class="field" style="margin:0"><label>Unit. ARS ← CMV</label>
+        <input id="li-uars-${i}" readonly value="${it.unitARS?Math.round(it.unitARS).toLocaleString('es-AR'):''}"
+          style="background:transparent;border-color:var(--green-border);color:var(--green);font-family:var(--font-mono);font-weight:700">
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildLotBody() {
+  const items = lI.map((it,i) => lotItemRow(it,i)).join('');
+  const totARS = lI.reduce((s,it)=>s+(it.totalARS||0),0);
+  const totUSD = lI.reduce((s,it)=>s+(it.totalUSD||0),0);
+  return `
+    <div class="grid2" style="margin-bottom:4px">
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="l-f" value="${lF.fecha||hoy()}" oninput="lF.fecha=this.value">
+      </div>
+      <div class="field"><label>Nº de Lote</label>
+        <input id="l-nro" value="${lF.nro||''}" oninput="lF.nro=this.value" placeholder="Ej: L-001">
+      </div>
+      <div class="field"><label>Proveedor</label>
+        <input id="l-p" value="${lF.prov||''}" oninput="lF.prov=this.value" placeholder="Nombre del proveedor">
+      </div>
+      <div class="field"><label>TC ($ por USD)</label>
+        <input type="number" id="l-tc" value="${lF.tc||''}" min="0" placeholder="Auto BCRA"
+          oninput="lF.tc=+this.value;recalcAllLot()">
+      </div>
       <div class="field"><label>Estado</label>
         <select oninput="lF.est=this.value">
           <option value="pagado"${lF.est!=='pendiente'?' selected':''}>Pagado</option>
           <option value="pendiente"${lF.est==='pendiente'?' selected':''}>Pendiente</option>
         </select>
       </div>
-      <div class="field span2"><label>Notas</label><input value="${lF.notas||''}" oninput="lF.notas=this.value" placeholder="Observaciones"></div>
+      <div class="field"><label>Notas</label>
+        <input value="${lF.notas||''}" oninput="lF.notas=this.value" placeholder="Observaciones">
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
       <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Productos del lote</span>
-      <button class="btn btn-sm" onclick="aLI()">+ Agregar fila</button>
+      <button class="btn btn-sm" onclick="aLI()">+ Agregar producto</button>
     </div>
     <div id="lot-items">${items}</div>
-    <div class="item-total">Total lote: ${ARS(tot)}</div>`;
+    <div style="display:flex;justify-content:flex-end;gap:16px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+      <span style="font-size:13px;color:var(--text2)">Total lote:</span>
+      <span style="font-family:var(--font-mono);font-weight:600;color:var(--brand)">USD ${totUSD.toFixed(2)}</span>
+      <span style="font-family:var(--font-mono);font-weight:600;color:var(--green)">${ARS(totARS)}</span>
+    </div>`;
 }
 
-function refreshLotModal(title, fn) {
-  document.getElementById('modal-box').innerHTML = mHtml(title, buildLotBody(), fn);
+function refreshLotModal() {
+  document.getElementById('modal-box').innerHTML = mHtml('Nuevo lote de compra', buildLotBody(), 'saveLot()');
 }
 
 function vLot() {
-  const rows = [...DB.l].reverse().map(l => `<tr>
-    <td>${fmtD(l.fecha)}</td>
-    <td><span class="mono" style="font-size:12px;color:var(--brand);font-weight:600">${l.nroLote||'—'}</span></td>
-    <td>${l.proveedor||'—'}</td>
-    <td style="font-size:12px;color:var(--text2)">${(l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return`${i.qty}× ${p?p.nombre:'?'}`;}).join(', ')}</td>
-    <td class="mono">${ARS(l.total)}</td>
-    <td><span class="badge badge-${l.estado==='pagado'?'green':'amber'}">${l.estado}</span></td>
-    <td><button class="btn btn-sm btn-danger" onclick="dLot('${l.id}')">Eliminar</button></td>
-  </tr>`).join('');
+  const rows = [...DB.l].reverse().map(l => {
+    const totUSD = (l.items||[]).reduce((s,i)=>s+(i.totalUSD||0),0);
+    const totARS = (l.items||[]).reduce((s,i)=>s+(i.totalARS||0),0);
+    const prods  = (l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return p?p.nombre:'?';}).join(', ');
+    return `<tr>
+      <td style="white-space:nowrap">${fmtD(l.fecha)}</td>
+      <td style="font-size:12px;font-weight:500">${prods}</td>
+      <td><span class="mono" style="font-size:12px;color:var(--brand);font-weight:600">${l.nroLote||'—'}</span></td>
+      <td style="font-size:12px">${l.proveedor||'—'}</td>
+      <td class="mono" style="font-size:12px">${(l.items||[]).reduce((s,i)=>s+(+i.qty||0),0)} u</td>
+      <td class="mono" style="color:var(--brand)">USD ${totUSD.toFixed(2)}</td>
+      <td class="mono" style="font-weight:600">${ARS(totARS||l.total||0)}</td>
+      <td class="mono" style="font-size:12px;color:var(--text2)">${l.tc?'$'+Number(l.tc).toLocaleString('es-AR'):'—'}</td>
+      <td><span class="badge badge-${l.estado==='pagado'?'green':'amber'}">${l.estado}</span></td>
+      <td><button class="btn btn-sm btn-danger" onclick="dLot('${l.id}')">Eliminar</button></td>
+    </tr>`;
+  }).join('');
+
   return `
     <div class="page-header">
-      <div><div class="page-title">Compras / Lotes</div><div class="page-sub">Registro de compras de mercadería por lote</div></div>
+      <div><div class="page-title">Compras / Lotes</div><div class="page-sub">Costos en USD con conversión automática a ARS</div></div>
       <button class="btn btn-primary" onclick="oNewL()">+ Nuevo lote</button>
     </div>
     <div class="card">
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Nº Lote</th><th>Proveedor</th><th>Productos</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${rows||`<tr><td colspan="7"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
+          <thead><tr>
+            <th>Fecha</th><th>Producto</th><th>Nº Lote</th><th>Proveedor</th>
+            <th>Cant.</th><th>Total USD</th><th>Total ARS</th><th>TC</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="10"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
 }
 
-function oNewL() {
-  lF = {fecha:hoy(), prov:'', est:'pagado', notas:''};
-  lI = [{pid:'', qty:1, costo:0}];
+async function oNewL() {
+  const tc = await fetchTC();
+  lF = {fecha:hoy(), nro:'', prov:'', est:'pagado', notas:'', tc:tc||''};
+  lI = [{pid:'', qty:1, alibaba:0, envioChina:0, impCompra:0, impTarjeta:0, impImport:0, costo:0, totalUSD:0, unitUSD:0, totalARS:0, unitARS:0}];
   mOpen('Nuevo lote de compra', buildLotBody(), 'saveLot()');
 }
-function aLI()       { lI.push({pid:'', qty:1, costo:0}); refreshLotModal('Nuevo lote de compra','saveLot()'); }
-function dLI(i)      { lI.splice(i,1); refreshLotModal('Nuevo lote de compra','saveLot()'); }
-function slLI(i,pid) {
+
+function aLI() {
+  lI.push({pid:'', qty:1, alibaba:0, envioChina:0, impCompra:0, impTarjeta:0, impImport:0, costo:0, totalUSD:0, unitUSD:0, totalARS:0, unitARS:0});
+  refreshLotModal();
+}
+
+function dLI(i) { lI.splice(i,1); refreshLotModal(); }
+
+function slLI(i, pid) {
   lI[i].pid = pid;
-  const p = DB.p.find(x=>x.id===pid);
-  if (p && p.costoBase) lI[i].costo = p.costoBase;
-  refreshLotModal('Nuevo lote de compra','saveLot()');
+  refreshLotModal();
 }
 
 function saveLot() {
   if (lI.some(i=>!i.pid)) return alert('Seleccioná un producto en cada fila');
-  DB.l.push({id:uid(), nroLote:lF.nro||'', fecha:lF.fecha||hoy(), proveedor:lF.prov, estado:lF.est, notas:lF.notas, items:[...lI], total:lI.reduce((s,i)=>s+i.qty*i.costo,0)});
+  // recalcular antes de guardar
+  const tc = +lF.tc || 0;
+  lI.forEach(it => {
+    const c = calcLoteItem(it, tc);
+    Object.assign(it, c);
+    it.costo = c.unitARS; // costo unitario ARS para CMV
+  });
+  const totARS = lI.reduce((s,i)=>s+i.totalARS,0);
+  DB.l.push({
+    id:uid(), nroLote:lF.nro||'', fecha:lF.fecha||hoy(),
+    proveedor:lF.prov, estado:lF.est, notas:lF.notas,
+    tc:lF.tc, items:[...lI], total:totARS
+  });
   dbSave('l'); mClose(); rview();
 }
+
 function dLot(id) {
   if (!confirm('¿Eliminar este lote?')) return;
   DB.l = DB.l.filter(x=>x.id!==id); dbSave('l'); rview();
@@ -885,7 +1145,186 @@ function dVent(id) {
   DB.v = DB.v.filter(x=>x.id!==id); dbSave('v'); rview();
 }
 
-// ─── GASTOS ───────────────────────────────────────────────────────────────────
+// ─── DEVOLUCIONES ─────────────────────────────────────────────────────────────
+const DEV_MOTIVOS  = ['Arrepentimiento','Problema del producto'];
+const DEV_DESTINOS = ['Vuelve a Full','Vuelve a nosotros (personal)'];
+
+function calcDev(venta, motivo) {
+  if (!venta) return {reintegro:0, penalidad:0};
+  const bruto   = (venta.precioVenta||0) * (venta.cantidad||1);
+  const cEnvio  = venta.costoEnvio || (CFG.costoEnvioMeli||0) * (venta.cantidad||1);
+  if (motivo === 'Problema del producto') {
+    // Meli devuelve el bruto pero descuenta envío ida + envío vuelta
+    const penalidad = cEnvio * 2;
+    return {reintegro: bruto - penalidad, penalidad};
+  }
+  // Arrepentimiento → reintegro total del precio bruto
+  return {reintegro: bruto, penalidad: 0};
+}
+
+function vDev() {
+  const total = DB.d.length;
+  const porMotivo = DEV_MOTIVOS.reduce((o,m)=>{o[m]=DB.d.filter(d=>d.motivo===m).length;return o;},{});
+  const rows = [...DB.d].reverse().map(d => {
+    const venta = DB.v.find(v=>v.id===d.vid);
+    const prod  = DB.p.find(p=>p.id===d.pid);
+    const esProd = d.motivo==='Problema del producto';
+    return `<tr>
+      <td style="white-space:nowrap">${fmtD(d.fecha)}</td>
+      <td class="mono" style="color:var(--brand);font-weight:600">${venta?.factura||'—'}</td>
+      <td class="mono" style="color:var(--text2)">${d.nc||'—'}</td>
+      <td style="font-size:13px;font-weight:500">${prod?prod.nombre:'—'}</td>
+      <td style="text-align:center;font-family:var(--font-mono)">${d.cantidad||1}</td>
+      <td><span class="badge badge-${esProd?'red':'amber'}">${d.motivo}</span></td>
+      <td><span class="badge badge-blue" style="font-size:10px">${d.destino}</span></td>
+      <td class="mono" style="color:var(--green)">${ARS(d.reintegro||0)}</td>
+      <td class="mono" style="color:var(--red);font-size:12px">${d.penalidad?ARS(d.penalidad):'—'}</td>
+      <td style="font-size:12px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.notas||''}">${d.notas||'—'}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="dDev('${d.id}')">Eliminar</button></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Devoluciones</div>
+        <div class="page-sub">${total} devolución${total!==1?'es':''} registrada${total!==1?'s':''}
+          ${DEV_MOTIVOS.map(m=>porMotivo[m]?` · ${m}: <strong>${porMotivo[m]}</strong>`:'').join('')}
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="oNewDev()">+ Nueva devolución</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Fecha dev.</th><th>Nº FC</th><th>NC aplicada</th><th>Producto</th><th>Cant.</th>
+            <th>Motivo</th><th>Destino stock</th><th>Reintegro</th><th>Penalidad</th><th>Notas</th><th></th>
+          </tr></thead>
+          <tbody>${rows||`<tr><td colspan="11"><div class="empty"><div class="empty-icon">↩</div><div class="empty-text">Sin devoluciones registradas</div></div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function buscarVentaPorFC(nroFC) {
+  if (!nroFC) return null;
+  return DB.v.find(v => v.factura && v.factura.toString().trim().toLowerCase() === nroFC.toString().trim().toLowerCase()) || null;
+}
+
+function buildDevForm() {
+  const venta = devF.vid ? DB.v.find(v=>v.id===devF.vid) : null;
+  const c = venta ? calcDev(venta, devF.motivo||DEV_MOTIVOS[0]) : {reintegro:0,penalidad:0};
+  const prod = venta ? DB.p.find(p=>p.id===venta.pid) : null;
+
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha de devolución</label>
+        <input type="date" id="dev-f" value="${devF.fecha||hoy()}" oninput="devF.fecha=this.value">
+      </div>
+      <div class="field"><label>Motivo</label>
+        <select id="dev-m" onchange="devF.motivo=this.value;refreshDevModal()">
+          ${DEV_MOTIVOS.map(m=>`<option${devF.motivo===m?' selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Nº de Factura (FC) *</label>
+        <input id="dev-fc" value="${devF.fcBuscar||''}" placeholder="Ingresá el Nº de FC"
+          oninput="devF.fcBuscar=this.value" onblur="devBuscarFC()">
+      </div>
+      <div class="field"><label>NC aplicada</label>
+        <input id="dev-nc" value="${devF.nc||''}" oninput="devF.nc=this.value" placeholder="Nº de Nota de Crédito (opcional)">
+      </div>
+    </div>
+    <!-- Info de la venta encontrada -->
+    <div id="dev-venta-info" style="margin:4px 0 12px;padding:10px 12px;border-radius:var(--radius-sm);font-size:12px;
+      ${venta
+        ? 'background:var(--green-bg);border:1px solid var(--green-border);color:var(--green)'
+        : devF.fcBuscar
+          ? 'background:var(--red-bg);border:1px solid var(--red-border);color:var(--red)'
+          : 'background:var(--bg3);border:1px solid var(--border);color:var(--text3)'}">
+      ${venta
+        ? `✓ Venta encontrada: <strong>${prod?prod.nombre:'?'}</strong> — ${fmtD(venta.fecha)} — Cliente: ${venta.cliente||'—'} — ${ARS(venta.precioVenta*(venta.cantidad||1))}`
+        : devF.fcBuscar
+          ? `✗ No se encontró ninguna venta con FC: <strong>${devF.fcBuscar}</strong>`
+          : 'Ingresá el Nº de FC para buscar la venta automáticamente'}
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Cantidad a devolver</label>
+        <input type="number" id="dev-cant" value="${devF.cantidad||1}" min="1" oninput="devF.cantidad=+this.value">
+      </div>
+      <div class="field"><label>Destino del stock</label>
+        <select id="dev-dest" onchange="devF.destino=this.value">
+          ${DEV_DESTINOS.map(d=>`<option${devF.destino===d?' selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field span2"><label>Notas (opcional)</label>
+        <input id="dev-n" value="${devF.notas||''}" oninput="devF.notas=this.value"
+          placeholder="Ej: cliente dice que no funciona, revisado OK — funciona bien">
+      </div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:12px;margin-top:4px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Impacto calculado</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Reintegro al cliente</div>
+          <div style="font-family:var(--font-mono);font-weight:600;font-size:14px;color:var(--green)">${ARS(c.reintegro)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Penalidad (2 envíos)</div>
+          <div style="font-family:var(--font-mono);font-weight:600;font-size:14px;color:var(--red)">${c.penalidad?ARS(c.penalidad):'—'}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Unidad vuelve al stock</div>
+          <div style="font-family:var(--font-mono);font-weight:600;font-size:14px;color:var(--brand)">✓ Sí</div>
+        </div>
+      </div>
+      ${devF.motivo==='Problema del producto'?`<div style="margin-top:8px;font-size:11px;color:var(--amber)">⚠ Problema del producto: se descuentan 2 envíos (ida + vuelta). El producto vuelve al stock — revisá si funciona correctamente.</div>`:''}
+    </div>`;
+}
+
+function devBuscarFC() {
+  const fc = devF.fcBuscar;
+  const venta = buscarVentaPorFC(fc);
+  devF.vid = venta ? venta.id : '';
+  refreshDevModal();
+}
+
+function refreshDevModal() {
+  document.getElementById('modal-box').innerHTML = mHtml('Nueva devolución', buildDevForm(), 'saveDev()');
+}
+
+function oNewDev() {
+  devF = {fecha:hoy(), motivo:DEV_MOTIVOS[0], fcBuscar:'', vid:'', nc:'', cantidad:1, destino:DEV_DESTINOS[0], notas:''};
+  mOpen('Nueva devolución', buildDevForm(), 'saveDev()');
+}
+
+function saveDev() {
+  if (!devF.vid) return alert('Ingresá el Nº de FC para buscar y asociar la venta original');
+  const venta = DB.v.find(v=>v.id===devF.vid);
+  if (!venta) return alert('Venta no encontrada');
+  const c = calcDev(venta, devF.motivo);
+  DB.d.push({
+    id:       uid(),
+    fecha:    devF.fecha||hoy(),
+    motivo:   devF.motivo,
+    vid:      devF.vid,
+    pid:      venta.pid,
+    nc:       devF.nc||'',
+    cantidad: devF.cantidad||1,
+    destino:  devF.destino,
+    notas:    devF.notas,
+    reintegro:  c.reintegro,
+    penalidad:  c.penalidad,
+  });
+  dbSave('d'); mClose(); rview();
+}
+
+function dDev(id) {
+  if (!confirm('¿Eliminar esta devolución?')) return;
+  DB.d = DB.d.filter(x=>x.id!==id); dbSave('d'); rview();
+}
+
+
 function vGast() {
   const now = new Date();
   const tm = DB.g.filter(g=>{
@@ -1011,7 +1450,13 @@ function resMonthData(y, m) {
   // Impuestos = IIBB ventas + categoría Impuestos de gastos
   const impuestos      = iibbVentas + (gastosCat['Impuestos']||0);
   const totalDedVenta  = costoEnvio + comisionML + impuestos;
-  const facturacionNeta = utilBruta - totalDedVenta;
+
+  // Devoluciones del período
+  const fd          = (DB.d||[]).filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
+  const reintegros  = fd.reduce((s,d)=>s+(d.reintegro||0),0);
+  const penalidades = fd.reduce((s,d)=>s+(d.penalidad||0),0);
+
+  const facturacionNeta = utilBruta - totalDedVenta - reintegros - penalidades;
 
   // Gastos operativos (excluye Impuestos y Tasa)
   const gastoOp = CATS_OP.reduce((s,c)=>s+(gastosCat[c]||0),0);
@@ -1026,6 +1471,7 @@ function resMonthData(y, m) {
   return {
     ventas, cmv, utilBruta,
     costoEnvio, comisionML, impuestos, totalDedVenta,
+    reintegros, penalidades,
     facturacionNeta, gastosCat, gastoOp,
     tasa, utilNeta, pctUV, margen, facMin
   };
@@ -1056,7 +1502,8 @@ function vRes() {
     comisionML:       mData.reduce((s,d)=>s+d.comisionML,0),
     impuestos:        mData.reduce((s,d)=>s+d.impuestos,0),
     totalDedVenta:    mData.reduce((s,d)=>s+d.totalDedVenta,0),
-    facturacionNeta:  mData.reduce((s,d)=>s+d.facturacionNeta,0),
+    reintegros:       mData.reduce((s,d)=>s+d.reintegros,0),
+    penalidades:      mData.reduce((s,d)=>s+d.penalidades,0),
     gastosCat:        {},
     gastoOp:          mData.reduce((s,d)=>s+d.gastoOp,0),
     tasa:             mData.reduce((s,d)=>s+d.tasa,0),
@@ -1144,6 +1591,8 @@ function vRes() {
             ${row('Costo Envío Meli',      d=>d.costoEnvio,      {indent:true, neg:true})}
             ${row('Comisión ML',           d=>d.comisionML,      {indent:true, neg:true})}
             ${row('Impuestos (IIBB + cat.)', d=>d.impuestos,     {indent:true, neg:true})}
+            ${row('Devoluciones',           d=>d.reintegros,     {indent:true, neg:true})}
+            ${row('Penalidades envío dev.',  d=>d.penalidades,    {indent:true, neg:true})}
             ${rowSep()}
             ${row('Facturación Neta',      d=>d.facturacionNeta, {bold:true, subtotal:true})}
             ${rowHeader('Gastos operativos')}
@@ -1408,6 +1857,7 @@ function importDB(e) {
       if (data.v) DB.v = data.v;
       if (data.g) DB.g = data.g;
       if (data.u) DB.u = data.u;
+      if (data.d) DB.d = data.d;
       Object.keys(SK).forEach(k => dbSave(k));
       alert('✓ Datos importados correctamente');
       rview();
