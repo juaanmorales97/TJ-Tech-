@@ -1906,9 +1906,11 @@ function setRango() {
   const dy = document.getElementById('r-dy')?.value;
   const hm = document.getElementById('r-hm')?.value;
   const hy = document.getElementById('r-hy')?.value;
+  // Guardar siempre los valores parciales
   if (dy && dm) rDesde = `${dy}-${dm}`;
   if (hy && hm) rHasta = `${hy}-${hm}`;
-  if ((dy&&dm) || (hy&&hm)) { rPer = 'rango'; rview(); }
+  // Solo re-renderizar cuando ambos extremos están completos
+  if (dy && dm && hy && hm) { rPer = 'rango'; rview(); }
 }
 
 dbLoad();
