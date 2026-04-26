@@ -941,8 +941,13 @@ function calcVenta(f) {
   const cant      = +f.cantidad||0;
   const pv        = +f.precioVenta||0;
   const bruto     = pv * cant;
-  const comML     = f.canal==='Meli' ? bruto * (CFG.mlComision/100) : 0;
-  const envio     = f.canal==='Meli' ? (CFG.costoEnvioMeli||0) * cant : 0;
+  // Usar valor manual si fue editado, si no calcular automático
+  const comML     = f.canal==='Meli'
+    ? (f.comMLManual!=null ? +f.comMLManual : bruto * (CFG.mlComision/100))
+    : 0;
+  const envio     = f.canal==='Meli'
+    ? (f.envioManual!=null ? +f.envioManual : (CFG.costoEnvioMeli||0) * cant)
+    : 0;
   const iibb      = +f.iibb||0;
   const facturacion  = bruto - comML - envio - iibb;
   const costoTotal   = (+f.costoU||0) * cant;
@@ -953,11 +958,14 @@ function calcVenta(f) {
   return {bruto,comML,envio,iibb,facturacion,costoTotal,margenBruto,tc,facturacionUSD,gananciaUSD};
 }
 
-function recalcVF() {
+function recalcVF(resetManual) {
+  // Si cambia canal o cantidad, resetear los manuales
+  if (resetManual) { vF.comMLManual = null; vF.envioManual = null; }
   const c = calcVenta(vF);
   const set = (id,v,fmt) => { const el=document.getElementById(id); if(el) el.value=fmt?fmt(v):(v||''); };
-  set('vf-comml',   c.comML,       v=>v?ARS(v):'—');
-  set('vf-envio',   c.envio,       v=>v?ARS(v):'—');
+  // Solo actualizar comML y envio si no fueron editados manualmente
+  if (vF.comMLManual==null) set('vf-comml', c.comML, v=>v||v===0?v:'');
+  if (vF.envioManual==null) set('vf-envio', c.envio, v=>v||v===0?v:'');
   set('vf-fact',    c.facturacion, ARS);
   set('vf-mb',      c.margenBruto, ARS);
   set('vf-fusd',    c.facturacionUSD, v=>v?'USD '+v.toFixed(2):'—');
@@ -987,18 +995,28 @@ function buildVentForm() {
         <input id="vf-cli" value="${vF.cliente||''}" oninput="vF.cliente=this.value" placeholder="Nombre del cliente">
       </div>
       <div class="field"><label>Canal *</label>
-        <select id="vf-canal" onchange="vF.canal=this.value;recalcVF()">
+        <select id="vf-canal" onchange="vF.canal=this.value;recalcVF(true)">
           ${CANALES.map(c=>`<option${vF.canal===c?' selected':''}>${c}</option>`).join('')}
         </select>
       </div>
       <div class="field"><label>Cantidad</label>
-        <input type="number" id="vf-cant" value="${vF.cantidad||1}" min="1" oninput="vF.cantidad=+this.value;recalcVF()">
+        <input type="number" id="vf-cant" value="${vF.cantidad||1}" min="1" oninput="vF.cantidad=+this.value;recalcVF(true)">
       </div>
       <div class="field"><label>Precio venta ($ / u)</label>
         <input type="number" id="vf-pv" value="${vF.precioVenta||''}" min="0" oninput="vF.precioVenta=+this.value;recalcVF()">
       </div>
       <div class="field"><label>Costo U. ($ / u)</label>
         <input type="number" id="vf-cu" value="${vF.costoU||''}" min="0" oninput="vF.costoU=+this.value;recalcVF()" style="background:var(--bg3)">
+      </div>
+      <div class="field"><label>Comisión ML ($) <span style="font-size:10px;color:var(--text3)">auto · editable</span></label>
+        <input type="number" id="vf-comml" value="${vF.comMLManual!=null?vF.comMLManual:calcVenta(vF).comML}" min="0"
+          oninput="vF.comMLManual=+this.value;recalcVF()"
+          style="${vF.canal!=='Meli'?'opacity:.4;pointer-events:none':''}">
+      </div>
+      <div class="field"><label>Costo Envío ($) <span style="font-size:10px;color:var(--text3)">auto · editable</span></label>
+        <input type="number" id="vf-envio" value="${vF.envioManual!=null?vF.envioManual:calcVenta(vF).envio}" min="0"
+          oninput="vF.envioManual=+this.value;recalcVF()"
+          style="${vF.canal!=='Meli'?'opacity:.4;pointer-events:none':''}">
       </div>
       <div class="field"><label>IIBB ($)</label>
         <input type="number" id="vf-iibb" value="${vF.iibb||0}" min="0" oninput="vF.iibb=+this.value;recalcVF()">
@@ -1019,20 +1037,16 @@ function buildVentForm() {
       </div>
     </div>
     <div style="background:var(--bg3);border:1px solid var(--brand-border);border-radius:var(--radius-sm);padding:12px;margin-top:4px">
-      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Cálculo automático</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Resultado calculado</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
         ${[
-          ['Comisión ML',     'vf-comml'],
-          ['Costo Envío',     'vf-envio'],
-          ['Facturación',     'vf-fact'],
-          ['Margen Bruto',    'vf-mb'],
-          ['Fact. USD',       'vf-fusd'],
-          ['Ganancia USD',    'vf-gusd'],
+          ['Facturación',  'vf-fact'],
+          ['Margen Bruto', 'vf-mb'],
+          ['Fact. USD',    'vf-fusd'],
+          ['Ganancia USD', 'vf-gusd'],
         ].map(([l,id])=>`<div>
           <div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l}</div>
           <input id="${id}" readonly value="${
-            id==='vf-comml'?(c.comML?ARS(c.comML):'—'):
-            id==='vf-envio'?(c.envio?ARS(c.envio):'—'):
             id==='vf-fact'?ARS(c.facturacion):
             id==='vf-mb'?ARS(c.margenBruto):
             id==='vf-fusd'?(c.facturacionUSD?'USD '+c.facturacionUSD.toFixed(2):'—'):
@@ -1112,6 +1126,7 @@ async function oNewV() {
   vF = {
     fecha:hoy(), factura:'', cliente:'', pid:'', canal:'Particular',
     cantidad:1, precioVenta:0, costoU:0, iibb:0,
+    comMLManual:null, envioManual:null,
     tc: tc||'', medioCobro:'Transferencia', estado:'cobrado'
   };
   mOpen('Nueva venta', buildVentForm(), 'saveVent()');
