@@ -1475,12 +1475,24 @@ function resMonthData(y, m) {
   };
 }
 
+// rango libre para resultados
+let rDesde = '', rHasta = '';
+
 function vRes() {
   const now = new Date();
 
   // Construir lista de meses según el período seleccionado
   let months = [];
-  if (rPer==='anio') {
+  if (rPer==='rango' && rDesde && rHasta) {
+    const [dy,dm] = rDesde.split('-').map(Number);
+    const [hy,hm] = rHasta.split('-').map(Number);
+    let cy=dy, cm=dm-1;
+    const ey=hy, em=hm-1;
+    while(cy<ey||(cy===ey&&cm<=em)) {
+      months.push({y:cy,m:cm});
+      cm++; if(cm>11){cm=0;cy++;}
+    }
+  } else if (rPer==='anio') {
     for(let m=0;m<=now.getMonth();m++) months.push({y:now.getFullYear(),m});
   } else if (rPer==='6m') {
     for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth()});}
@@ -1562,12 +1574,21 @@ function vRes() {
   const thCols = allLbl.map((l,i)=>`<th style="text-align:right;padding:10px 12px;${isLast(i)?'border-left:2px solid var(--border);background:var(--bg3)':''}">${l}</th>`).join('');
 
   return `
-    <div class="page-header">
+    <div class="page-header" style="flex-wrap:wrap;gap:12px">
       <div><div class="page-title">Estado de resultados</div><div class="page-sub">Comparativa mensual — datos de Ventas, Lotes y Gastos</div></div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
         ${[{v:'3m',l:'3 meses'},{v:'6m',l:'6 meses'},{v:'anio',l:'Año actual'}].map(o=>
           `<button class="btn-seg${rPer===o.v?' active':''}" onclick="rPer='${o.v}';rview()">${o.l}</button>`
         ).join('')}
+        <div style="display:flex;align-items:center;gap:4px;margin-left:4px;padding-left:8px;border-left:1px solid var(--border)">
+          <input type="month" id="r-desde" value="${rDesde||''}"
+            style="padding:5px 8px;font-size:12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit;${rPer==='rango'?'border-color:var(--brand);':''}"
+            oninput="rDesde=this.value;rPer='rango';rview()">
+          <span style="font-size:12px;color:var(--text3)">→</span>
+          <input type="month" id="r-hasta" value="${rHasta||''}"
+            style="padding:5px 8px;font-size:12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit;${rPer==='rango'?'border-color:var(--brand);':''}"
+            oninput="rHasta=this.value;rPer='rango';rview()">
+        </div>
       </div>
     </div>
     <div class="card">
