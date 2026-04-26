@@ -1476,14 +1476,21 @@ function resMonthData(y, m) {
 }
 
 // rango libre para resultados
-let rDesde = '', rHasta = '';
+let rDesde = '', rHasta = '', rMes1 = '', rAnioSel = 0;
 
 function vRes() {
   const now = new Date();
 
   // Construir lista de meses según el período seleccionado
   let months = [];
-  if (rPer==='rango' && rDesde && rHasta) {
+  if (rPer==='anioSel' && rAnioSel) {
+    const isCurrentYear = rAnioSel === now.getFullYear();
+    const lastMonth = isCurrentYear ? now.getMonth() : 11;
+    for(let m=0; m<=lastMonth; m++) months.push({y:rAnioSel, m});
+  } else if (rPer==='mes1' && rMes1) {
+    const [y,m] = rMes1.split('-').map(Number);
+    months = [{y, m: m-1}];
+  } else if (rPer==='rango' && rDesde && rHasta) {
     const [dy,dm] = rDesde.split('-').map(Number);
     const [hy,hm] = rHasta.split('-').map(Number);
     let cy=dy, cm=dm-1;
@@ -1573,22 +1580,6 @@ function vRes() {
   // ── encabezado de columnas ──
   const thCols = allLbl.map((l,i)=>`<th style="text-align:right;padding:10px 12px;${isLast(i)?'border-left:2px solid var(--border);background:var(--bg3)':''}">${l}</th>`).join('');
 
-  // Generar opciones de años desde 2025 hasta año actual+1
-  const yearOpts = [];
-  for(let y=2025; y<=2035; y++) yearOpts.push(y);
-  const mesOpts = MN.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`).join('');
-  const selStyle = `padding:5px 8px;font-size:12px;border:1px solid ${rPer==='rango'?'var(--brand)':'var(--border2)'};border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit`;
-
-  const [dY='',dM=''] = rDesde ? rDesde.split('-') : [];
-  const [hY='',hM=''] = rHasta ? rHasta.split('-') : [];
-
-  const selMes = (id,val) => `<select id="${id}" style="${selStyle}" onchange="setRango()">
-    <option value="">Mes</option>${MN.map((m,i)=>{const v=String(i+1).padStart(2,'0');return`<option value="${v}"${v===val?' selected':''}>${m}</option>`;}).join('')}
-  </select>`;
-  const selAnio = (id,val) => `<select id="${id}" style="${selStyle}" onchange="setRango()">
-    <option value="">Año</option>${yearOpts.map(y=>`<option value="${y}"${String(y)===val?' selected':''}>${y}</option>`).join('')}
-  </select>`;
-
   return `
     <div class="page-header" style="flex-wrap:wrap;gap:12px">
       <div><div class="page-title">Estado de resultados</div><div class="page-sub">Comparativa mensual — datos de Ventas, Lotes y Gastos</div></div>
@@ -1596,10 +1587,12 @@ function vRes() {
         ${[{v:'3m',l:'3 meses'},{v:'6m',l:'6 meses'},{v:'anio',l:'Año actual'}].map(o=>
           `<button class="btn-seg${rPer===o.v?' active':''}" onclick="rPer='${o.v}';rview()">${o.l}</button>`
         ).join('')}
-        <div style="display:flex;align-items:center;gap:4px;margin-left:4px;padding-left:8px;border-left:1px solid var(--border)">
-          ${selMes('r-dm',dM)} ${selAnio('r-dy',dY)}
-          <span style="font-size:12px;color:var(--text3);margin:0 2px">→</span>
-          ${selMes('r-hm',hM)} ${selAnio('r-hy',hY)}
+        <div style="margin-left:4px;padding-left:8px;border-left:1px solid var(--border)">
+          <select style="padding:6px 10px;font-size:12px;border:1px solid ${rPer==='anioSel'?'var(--brand)':'var(--border2)'};border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit;font-weight:${rPer==='anioSel'?'600':'400'}"
+            onchange="if(this.value){rPer='anioSel';rAnioSel=+this.value;rview();}else{rPer='6m';rview();}">
+            <option value="">Año específico…</option>
+            ${Array.from({length: now.getFullYear()-2025+1}, (_,i)=>2025+i).map(y=>`<option value="${y}"${rPer==='anioSel'&&rAnioSel===y?' selected':''}>${y}</option>`).join('')}
+          </select>
         </div>
       </div>
     </div>
@@ -1900,18 +1893,6 @@ function importDB(e) {
   e.target.value = '';
 }
 
-
-function setRango() {
-  const dm = document.getElementById('r-dm')?.value;
-  const dy = document.getElementById('r-dy')?.value;
-  const hm = document.getElementById('r-hm')?.value;
-  const hy = document.getElementById('r-hy')?.value;
-  // Guardar siempre los valores parciales
-  if (dy && dm) rDesde = `${dy}-${dm}`;
-  if (hy && hm) rHasta = `${hy}-${hm}`;
-  // Solo re-renderizar cuando ambos extremos están completos
-  if (dy && dm && hy && hm) { rPer = 'rango'; rview(); }
-}
 
 dbLoad();
 cfgLoad();
