@@ -413,7 +413,76 @@ window.cfgSaveFS = async () => {
   .alert-strip-title { font-size: 12px; font-weight: 600; color: var(--red); margin-bottom: 6px; }
   .alert-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-  /* ─── CHART ─── */
+  /* ─── FILTROS ESTILO EXCEL ─── */
+  .th-filter {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .th-filter:hover { background: rgba(255,255,255,.15); }
+  .th-inner { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .th-sort-icon { font-size: 10px; opacity: .6; flex-shrink: 0; }
+  .th-filter.filtered .th-sort-icon { color: var(--brand-light); opacity: 1; }
+  .th-filter.sorted-asc .th-sort-icon::after  { content: ' ▲'; }
+  .th-filter.sorted-desc .th-sort-icon::after { content: ' ▼'; }
+
+  .filter-dropdown {
+    position: fixed;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    z-index: 9999;
+    min-width: 220px;
+    max-width: 280px;
+    padding: 10px;
+    display: none;
+  }
+  .filter-dropdown.open { display: block; }
+  .filter-search {
+    width: 100%; padding: 6px 8px;
+    border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    font-size: 12px; font-family: inherit;
+    background: var(--bg); margin-bottom: 6px;
+  }
+  .filter-search:focus { outline: none; border-color: var(--brand); }
+  .filter-sort-btns { display: flex; gap: 4px; margin-bottom: 8px; }
+  .filter-sort-btn {
+    flex: 1; padding: 5px 6px; font-size: 11px; font-family: inherit;
+    border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    background: var(--bg); cursor: pointer; color: var(--text2);
+    transition: all .1s;
+  }
+  .filter-sort-btn:hover { background: var(--bg3); color: var(--brand); border-color: var(--brand); }
+  .filter-sort-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .filter-options { max-height: 200px; overflow-y: auto; }
+  .filter-option {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 2px; font-size: 12px; cursor: pointer;
+    border-radius: 4px;
+  }
+  .filter-option:hover { background: var(--bg3); }
+  .filter-option input[type=checkbox] { cursor: pointer; accent-color: var(--brand); }
+  .filter-actions {
+    display: flex; gap: 6px; margin-top: 8px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .filter-apply {
+    flex: 1; padding: 6px; font-size: 12px; font-family: inherit;
+    background: var(--brand); color: #fff; border: none;
+    border-radius: var(--radius-sm); cursor: pointer; font-weight: 600;
+  }
+  .filter-clear {
+    padding: 6px 10px; font-size: 12px; font-family: inherit;
+    background: var(--bg); color: var(--text2);
+    border: 1px solid var(--border2); border-radius: var(--radius-sm); cursor: pointer;
+  }
+  .filter-badge {
+    display: inline-block; background: var(--brand-light); color: var(--brand-dark);
+    border-radius: 10px; font-size: 10px; font-weight: 700;
+    padding: 1px 5px; margin-left: 3px;
+  }
   .chart-wrap { padding: 1.25rem; }
   .chart-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 1rem; }
 
@@ -855,10 +924,9 @@ function vProd() {
     ${alertHtml}
     <div class="card">
       <div class="tbl-wrap">
-        <table>
+        <table id="tbl-prod">
           <thead><tr>
-            <th>Nombre</th><th>Unidad</th><th>Stock actual</th>
-            <th>Mínimo sugerido</th><th>Costo prom.</th><th>P. venta</th><th>Margen</th><th></th>
+            ${fth('Nombre','tbl-prod',0)}${fth('Unidad','tbl-prod',1)}${fth('Stock','tbl-prod',2)}${fth('Mín. sugerido','tbl-prod',3)}${fth('Costo prom.','tbl-prod',4)}${fth('P. venta','tbl-prod',5)}${fth('Margen','tbl-prod',6)}<th></th>
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="8"><div class="empty"><div class="empty-icon">▦</div><div class="empty-text">Sin productos. Agregá el primero.</div></div></td></tr>`}</tbody>
         </table>
@@ -1064,10 +1132,9 @@ function vLot() {
     </div>
     <div class="card">
       <div class="tbl-wrap">
-        <table>
+        <table id="tbl-lotes">
           <thead><tr>
-            <th>Fecha</th><th>Producto</th><th>Nº Lote</th><th>Proveedor</th>
-            <th>Cant.</th><th>Total USD</th><th>Total ARS</th><th>TC</th><th>Estado</th><th></th>
+            ${fth('Fecha','tbl-lotes',0)}${fth('Producto','tbl-lotes',1)}${fth('Nº Lote','tbl-lotes',2)}${fth('Proveedor','tbl-lotes',3)}${fth('Cant.','tbl-lotes',4)}${fth('Total USD','tbl-lotes',5)}${fth('Total ARS','tbl-lotes',6)}${fth('TC','tbl-lotes',7)}${fth('Estado','tbl-lotes',8)}<th></th>
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="10"><div class="empty"><div class="empty-icon">⊞</div><div class="empty-text">Sin lotes registrados</div></div></td></tr>`}</tbody>
         </table>
@@ -1289,12 +1356,26 @@ function vVent() {
     </div>
     <div class="card">
       <div class="tbl-wrap">
-        <table>
+        <table id="tbl-ventas">
           <thead><tr>
-            <th>Fecha</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Canal</th>
-            <th>Cant.</th><th>P.Venta</th><th>Com.ML</th><th>C.Envío</th><th>IIBB</th>
-            <th>Facturación</th><th>Margen Bruto</th><th>Cobro</th>
-            <th>TC</th><th>Fact.USD</th><th>Gan.USD</th><th>Estado</th><th></th>
+            ${fth('Fecha','tbl-ventas',0)}
+            ${fth('Factura','tbl-ventas',1)}
+            ${fth('Cliente','tbl-ventas',2)}
+            ${fth('Producto','tbl-ventas',3)}
+            ${fth('Canal','tbl-ventas',4)}
+            ${fth('Cant.','tbl-ventas',5)}
+            ${fth('P.Venta','tbl-ventas',6)}
+            ${fth('Com.ML','tbl-ventas',7)}
+            ${fth('C.Envío','tbl-ventas',8)}
+            ${fth('IIBB','tbl-ventas',9)}
+            ${fth('Facturación','tbl-ventas',10)}
+            ${fth('Margen Bruto','tbl-ventas',11)}
+            ${fth('Cobro','tbl-ventas',12)}
+            ${fth('TC','tbl-ventas',13)}
+            ${fth('Fact.USD','tbl-ventas',14)}
+            ${fth('Gan.USD','tbl-ventas',15)}
+            ${fth('Estado','tbl-ventas',16)}
+            <th></th>
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="18"><div class="empty"><div class="empty-icon">◎</div><div class="empty-text">Sin ventas registradas</div></div></td></tr>`}</tbody>
         </table>
@@ -1391,10 +1472,9 @@ function vDev() {
     </div>
     <div class="card">
       <div class="tbl-wrap">
-        <table>
+        <table id="tbl-dev">
           <thead><tr>
-            <th>Fecha dev.</th><th>Nº FC</th><th>NC aplicada</th><th>Producto</th><th>Cant.</th>
-            <th>Motivo</th><th>Destino stock</th><th>Reintegro</th><th>Penalidad</th><th>Otros gastos</th><th>Notas</th><th></th>
+            ${fth('Fecha','tbl-dev',0)}${fth('Nº FC','tbl-dev',1)}${fth('NC','tbl-dev',2)}${fth('Producto','tbl-dev',3)}${fth('Cant.','tbl-dev',4)}${fth('Motivo','tbl-dev',5)}${fth('Destino','tbl-dev',6)}${fth('Reintegro','tbl-dev',7)}${fth('Penalidad','tbl-dev',8)}${fth('Otros gastos','tbl-dev',9)}${fth('Notas','tbl-dev',10)}<th></th>
           </tr></thead>
           <tbody>${rows||`<tr><td colspan="12"><div class="empty"><div class="empty-icon">↩</div><div class="empty-text">Sin devoluciones registradas</div></div></td></tr>`}</tbody>
         </table>
@@ -1576,8 +1656,8 @@ function vGast() {
     </div>
     <div class="card">
       <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th></tr></thead>
+        <table id="tbl-gastos">
+          <thead><tr>${fth('Fecha','tbl-gastos',0)}${fth('Categoría','tbl-gastos',1)}${fth('Descripción','tbl-gastos',2)}${fth('Monto','tbl-gastos',3)}<th></th></tr></thead>
           <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">◇</div><div class="empty-text">Sin registros</div></div></td></tr>`}</tbody>
         </table>
       </div>
@@ -1636,8 +1716,8 @@ function vCaja() {
     </div>
     <div class="card">
       <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Saldo acum.</th></tr></thead>
+        <table id="tbl-caja">
+          <thead><tr>${fth('Fecha','tbl-caja',0)}${fth('Tipo','tbl-caja',1)}${fth('Concepto','tbl-caja',2)}${fth('Monto','tbl-caja',3)}${fth('Saldo acum.','tbl-caja',4)}</tr></thead>
           <tbody>${rows||`<tr><td colspan="5"><div class="empty"><div class="empty-icon">⇌</div><div class="empty-text">Sin movimientos</div></div></td></tr>`}</tbody>
         </table>
       </div>
@@ -2122,7 +2202,214 @@ function importDB(e) {
 }
 
 
-// ─── BOOT ─────────────────────────────────────────────────────────────────────
+// ─── MOTOR DE FILTROS ESTILO EXCEL ───────────────────────────────────────────
+const tableFilters = {}; // { tableId: { colIdx: { selected: Set, sort: 'asc'|'desc'|null } } }
+
+function initFilter(tableId) {
+  if (!tableFilters[tableId]) tableFilters[tableId] = {};
+}
+
+function getColType(values) {
+  const nums  = values.filter(v => v !== '' && !isNaN(v.replace(/[$,. ]/g,'')));
+  const dates = values.filter(v => /\d{1,2}\/\d{1,2}\/\d{4}/.test(v));
+  if (dates.length > values.length * 0.5) return 'date';
+  if (nums.length  > values.length * 0.5) return 'number';
+  return 'text';
+}
+
+function sortVal(v, type) {
+  if (type === 'number') return parseFloat(v.replace(/[$,. ]/g,'').replace(/\./g,'').replace(',','.')) || 0;
+  if (type === 'date')   { const p=v.split('/'); return p.length===3?new Date(p[2],p[1]-1,p[0]).getTime():0; }
+  return v.toLowerCase();
+}
+
+function openFilterDropdown(tableId, colIdx, thEl) {
+  // Cerrar cualquier dropdown abierto
+  document.querySelectorAll('.filter-dropdown.open').forEach(d => d.classList.remove('open'));
+
+  const table = document.getElementById(tableId);
+  if (!table) return;
+
+  // Recolectar valores únicos de la columna
+  const rows   = Array.from(table.querySelectorAll('tbody tr'));
+  const allVals = rows.map(r => {
+    const td = r.querySelectorAll('td')[colIdx];
+    return td ? td.innerText.trim() : '';
+  }).filter(v => v && v !== '—');
+  const unique = [...new Set(allVals)].sort();
+  const type   = getColType(unique);
+  unique.sort((a,b) => sortVal(a,type) < sortVal(b,type) ? -1 : 1);
+
+  initFilter(tableId);
+  if (!tableFilters[tableId][colIdx]) tableFilters[tableId][colIdx] = { selected: new Set(unique), sort: null };
+  const state = tableFilters[tableId][colIdx];
+
+  // Crear dropdown
+  let dd = document.getElementById('filter-dd');
+  if (!dd) { dd = document.createElement('div'); dd.id='filter-dd'; dd.className='filter-dropdown'; document.body.appendChild(dd); }
+
+  dd.innerHTML = `
+    <input class="filter-search" placeholder="Buscar..." oninput="filterSearch(this.value,'${tableId}',${colIdx})">
+    <div class="filter-sort-btns">
+      <button class="filter-sort-btn${state.sort==='asc'?' active':''}" onclick="applySort('${tableId}',${colIdx},'asc')">▲ A → Z</button>
+      <button class="filter-sort-btn${state.sort==='desc'?' active':''}" onclick="applySort('${tableId}',${colIdx},'desc')">▼ Z → A</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;display:flex;justify-content:space-between">
+      <span>Seleccionar:</span>
+      <span style="cursor:pointer;color:var(--brand)" onclick="filterSelectAll('${tableId}',${colIdx},true)">Todo</span>
+      &nbsp;|&nbsp;
+      <span style="cursor:pointer;color:var(--brand)" onclick="filterSelectAll('${tableId}',${colIdx},false)">Ninguno</span>
+    </div>
+    <div class="filter-options" id="filter-opts">
+      ${unique.map(v=>`
+        <label class="filter-option">
+          <input type="checkbox" value="${v.replace(/"/g,'&quot;')}" ${state.selected.has(v)?'checked':''}
+            onchange="filterToggle('${tableId}',${colIdx},this.value,this.checked)">
+          <span>${v}</span>
+        </label>`).join('')}
+    </div>
+    <div class="filter-actions">
+      <button class="filter-clear" onclick="clearFilter('${tableId}',${colIdx})">Limpiar</button>
+      <button class="filter-apply" onclick="applyFilter('${tableId}',${colIdx})">Aplicar</button>
+    </div>`;
+
+  // Posicionar
+  const rect = thEl.getBoundingClientRect();
+  dd.style.left = Math.min(rect.left, window.innerWidth-290) + 'px';
+  dd.style.top  = (rect.bottom + 4) + 'px';
+  dd.classList.add('open');
+
+  // Cerrar al click fuera
+  setTimeout(() => {
+    document.addEventListener('click', function handler(e) {
+      if (!dd.contains(e.target) && !thEl.contains(e.target)) {
+        dd.classList.remove('open');
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 0);
+}
+
+function filterSearch(q, tableId, colIdx) {
+  const opts = document.querySelectorAll('#filter-opts .filter-option');
+  opts.forEach(opt => {
+    const txt = opt.querySelector('span').textContent.toLowerCase();
+    opt.style.display = txt.includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function filterToggle(tableId, colIdx, val, checked) {
+  initFilter(tableId);
+  if (!tableFilters[tableId][colIdx]) return;
+  if (checked) tableFilters[tableId][colIdx].selected.add(val);
+  else         tableFilters[tableId][colIdx].selected.delete(val);
+}
+
+function filterSelectAll(tableId, colIdx, all) {
+  const opts = document.querySelectorAll('#filter-opts .filter-option input');
+  opts.forEach(cb => {
+    cb.checked = all;
+    filterToggle(tableId, colIdx, cb.value, all);
+  });
+}
+
+function applySort(tableId, colIdx, dir) {
+  initFilter(tableId);
+  if (!tableFilters[tableId][colIdx]) tableFilters[tableId][colIdx] = { selected: new Set(), sort: null };
+  tableFilters[tableId][colIdx].sort = tableFilters[tableId][colIdx].sort === dir ? null : dir;
+  applyFilter(tableId, colIdx);
+}
+
+function applyFilter(tableId, colIdx) {
+  const table  = document.getElementById(tableId);
+  if (!table) return;
+  const tbody  = table.querySelector('tbody');
+  const rows   = Array.from(tbody.querySelectorAll('tr'));
+  const filters = tableFilters[tableId] || {};
+
+  // Aplicar visibilidad
+  rows.forEach(r => {
+    let show = true;
+    Object.entries(filters).forEach(([ci, state]) => {
+      if (!state.selected || state.selected.size === 0) return;
+      const td = r.querySelectorAll('td')[+ci];
+      const v  = td ? td.innerText.trim() : '';
+      if (!state.selected.has(v)) show = false;
+    });
+    r.style.display = show ? '' : 'none';
+  });
+
+  // Ordenar si hay sort activo
+  const sortState = Object.entries(filters).find(([ci, s]) => s.sort);
+  if (sortState) {
+    const [sci, ss] = sortState;
+    const visible = rows.filter(r => r.style.display !== 'none');
+    const allVals = visible.map(r => {
+      const td = r.querySelectorAll('td')[+sci];
+      return td ? td.innerText.trim() : '';
+    });
+    const type = getColType(allVals);
+    visible.sort((a,b) => {
+      const va = sortVal((a.querySelectorAll('td')[+sci]?.innerText||'').trim(), type);
+      const vb = sortVal((b.querySelectorAll('td')[+sci]?.innerText||'').trim(), type);
+      return ss.sort === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+    });
+    visible.forEach(r => tbody.appendChild(r));
+  }
+
+  // Actualizar badges en headers
+  table.querySelectorAll('th.th-filter').forEach((th, i) => {
+    const f = filters[i];
+    th.classList.remove('filtered','sorted-asc','sorted-desc');
+    const badge = th.querySelector('.filter-badge');
+    if (badge) badge.remove();
+    if (f) {
+      if (f.sort === 'asc')  th.classList.add('sorted-asc');
+      if (f.sort === 'desc') th.classList.add('sorted-desc');
+      const allVals = rows.map(r=>(r.querySelectorAll('td')[i]?.innerText||'').trim()).filter(v=>v&&v!=='—');
+      const unique  = new Set(allVals);
+      if (f.selected && f.selected.size < unique.size) {
+        th.classList.add('filtered');
+        const b = document.createElement('span');
+        b.className = 'filter-badge';
+        b.textContent = f.selected.size;
+        th.querySelector('.th-inner').appendChild(b);
+      }
+    }
+  });
+
+  document.getElementById('filter-dd')?.classList.remove('open');
+}
+
+function clearFilter(tableId, colIdx) {
+  if (tableFilters[tableId]) {
+    delete tableFilters[tableId][colIdx];
+  }
+  applyFilter(tableId, colIdx);
+  // Reabrir con todos seleccionados
+  const th = document.querySelector(`#${tableId} th.th-filter:nth-child(${+colIdx+1})`);
+  if (th) openFilterDropdown(tableId, colIdx, th);
+}
+
+function clearAllFilters(tableId) {
+  tableFilters[tableId] = {};
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  table.querySelectorAll('tbody tr').forEach(r => r.style.display = '');
+  table.querySelectorAll('th.th-filter').forEach(th => {
+    th.classList.remove('filtered','sorted-asc','sorted-desc');
+    th.querySelector('.filter-badge')?.remove();
+  });
+}
+
+// Helper para generar th con filtro
+function fth(label, tableId, colIdx) {
+  return `<th class="th-filter" onclick="openFilterDropdown('${tableId}',${colIdx},this)">
+    <div class="th-inner">${label}<span class="th-sort-icon">⊿</span></div>
+  </th>`;
+}
+
+
 cfgLoad();
 // Exponer para el módulo Firebase
 window.rnav  = rnav;
