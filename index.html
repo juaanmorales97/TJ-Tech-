@@ -6,6 +6,119 @@
 <title>TJ Tech — Panel de control</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBP4ZndVTHdFGtPmicOsdE3dq1UbUDWPLc",
+  authDomain: "tjtech-panel.firebaseapp.com",
+  projectId: "tjtech-panel",
+  storageBucket: "tjtech-panel.firebasestorage.app",
+  messagingSenderId: "567212197010",
+  appId: "1:567212197010:web:75833f71f19c04b5d6d24b"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+window.doLogin = async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const err   = document.getElementById('login-err');
+  err.textContent = '';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    err.textContent = 'Email o contraseña incorrectos.';
+  }
+};
+
+window.doLogout = () => signOut(auth);
+
+// Enter en login
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+    window.doLogin();
+  }
+});
+
+// ── AUTH STATE ─────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, user => {
+  const loginScreen = document.getElementById('login-screen');
+  const appScreen   = document.getElementById('app-screen');
+  if (user) {
+    loginScreen.style.display = 'none';
+    appScreen.style.display   = 'flex';
+    document.getElementById('user-email').textContent = user.email;
+    initFirestore();
+  } else {
+    loginScreen.style.display = 'flex';
+    appScreen.style.display   = 'none';
+  }
+});
+
+// ── FIRESTORE ──────────────────────────────────────────────────────────────
+const COLLECTIONS = {p:'productos', l:'lotes', v:'ventas', g:'gastos', u:'usd', d:'devoluciones'};
+let fsUnsubscribes = [];
+
+async function initFirestore() {
+  // Cancelar listeners anteriores
+  fsUnsubscribes.forEach(u => u());
+  fsUnsubscribes = [];
+
+  // Escuchar cambios en tiempo real para cada colección
+  for (const [key, col] of Object.entries(COLLECTIONS)) {
+    const ref = doc(db, 'tjtech', col);
+    const unsub = onSnapshot(ref, snap => {
+      if (snap.exists()) {
+        const data = snap.data().items || [];
+        if (JSON.stringify(window.DB[key]) !== JSON.stringify(data)) {
+          window.DB[key] = data;
+          if (window.rview) window.rview();
+        }
+      }
+    });
+    fsUnsubscribes.push(unsub);
+  }
+
+  // Cargar config
+  try {
+    const cfgSnap = await getDoc(doc(db, 'tjtech', 'config'));
+    if (cfgSnap.exists()) {
+      window.CFG = {...window.CFG, ...cfgSnap.data()};
+    }
+  } catch {}
+
+  if (window.rnav) window.rnav();
+  if (window.rview) window.rview();
+}
+
+// Sobreescribir dbSave para usar Firestore
+window.dbSaveFS = async (key) => {
+  try {
+    const col = COLLECTIONS[key];
+    if (!col) return;
+    await setDoc(doc(db, 'tjtech', col), { items: window.DB[key] });
+  } catch(e) {
+    console.error('Error guardando en Firestore:', e);
+  }
+};
+
+window.cfgSaveFS = async () => {
+  try {
+    await setDoc(doc(db, 'tjtech', 'config'), window.CFG);
+  } catch(e) {
+    console.error('Error guardando config:', e);
+  }
+};
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -315,6 +428,41 @@
 </head>
 <body>
 
+<!-- ── PANTALLA DE LOGIN ──────────────────────────────────────────────── -->
+<div id="login-screen" style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:var(--brand-dark)">
+  <div style="background:#fff;border-radius:16px;padding:2.5rem 2rem;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="text-align:center;margin-bottom:2rem">
+      <svg width="60" height="60" viewBox="0 0 44 44" style="margin-bottom:12px">
+        <circle cx="22" cy="22" r="20" stroke="#2B7070" stroke-width="2.5" fill="none"/>
+        <text x="22" y="17" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="11" fill="#2B7070">TJ</text>
+        <text x="22" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="8.5" fill="#45CECE" letter-spacing="1.5">TECH</text>
+      </svg>
+      <div style="font-size:20px;font-weight:700;color:#0f2424;letter-spacing:-.3px">TJ Tech</div>
+      <div style="font-size:13px;color:#82a0a0;margin-top:4px">Panel de control</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:500;color:#4a6666;display:block;margin-bottom:5px">Email</label>
+      <input id="login-email" type="email" placeholder="tu@email.com"
+        style="width:100%;padding:10px 12px;border:1px solid #dde8e8;border-radius:8px;font-size:14px;font-family:inherit;outline:none"
+        onfocus="this.style.borderColor='#2B7070'" onblur="this.style.borderColor='#dde8e8'">
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;font-weight:500;color:#4a6666;display:block;margin-bottom:5px">Contraseña</label>
+      <input id="login-pass" type="password" placeholder="••••••••"
+        style="width:100%;padding:10px 12px;border:1px solid #dde8e8;border-radius:8px;font-size:14px;font-family:inherit;outline:none"
+        onfocus="this.style.borderColor='#2B7070'" onblur="this.style.borderColor='#dde8e8'">
+    </div>
+    <div id="login-err" style="font-size:12px;color:#dc2626;min-height:18px;margin-bottom:8px"></div>
+    <button onclick="doLogin()"
+      style="width:100%;padding:11px;background:#2B7070;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer">
+      Ingresar
+    </button>
+  </div>
+</div>
+
+<!-- ── APLICACIÓN ─────────────────────────────────────────────────────── -->
+<div id="app-screen" style="display:none">
+
 <div class="app">
   <!-- SIDEBAR -->
   <aside class="sidebar">
@@ -332,7 +480,10 @@
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-footer">
-      <div style="margin-bottom:8px;color:rgba(255,255,255,.35);font-size:11px">Datos guardados localmente</div>
+      <div id="user-email" style="color:rgba(255,255,255,.5);font-size:11px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button onclick="doLogout()" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;margin-bottom:6px;text-align:left">
+        ⎋ Cerrar sesión
+      </button>
       <button onclick="exportDB()" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;margin-bottom:6px;text-align:left">
         ↓ Exportar backup
       </button>
@@ -368,27 +519,46 @@ const MEDIOS_COBRO = ['Transferencia','Efectivo','Débito','Crédito','Mercado P
 // Tasa e Impuestos se manejan aparte en resultados
 const CATS_OP = ['Flete/Envío','Alquiler','Servicios','Personal','Publicidad','Materiales','Varios'];
 
-// ─── STORAGE ─────────────────────────────────────────────────────────────────
+// ─── STORAGE (Firestore) ──────────────────────────────────────────────────
+// SK se mantiene por compatibilidad con exportar/importar backup local
 const SK = {p:'gp_prod', l:'gp_lotes', v:'gp_ventas', g:'gp_gastos', u:'gp_usd', d:'gp_dev'};
 let DB = {p:[], l:[], v:[], g:[], u:[], d:[]};
 
+// Exponer globalmente para que el módulo Firebase los pueda leer/escribir
+window.DB  = DB;
+window.CFG = null; // se asigna después
+
 function dbLoad() {
-  for (const [k, sk] of Object.entries(SK)) {
-    try { const r = localStorage.getItem(sk); if (r) DB[k] = JSON.parse(r); } catch {}
-  }
+  // Solo se usa para importar backup — los datos vienen de Firestore via onSnapshot
 }
-const dbSave = k => { try { localStorage.setItem(SK[k], JSON.stringify(DB[k])); } catch {} };
+
+const dbSave = async k => {
+  // Guardar en Firestore si está disponible, sino localStorage como fallback
+  if (window.dbSaveFS) {
+    await window.dbSaveFS(k);
+  } else {
+    try { localStorage.setItem(SK[k], JSON.stringify(DB[k])); } catch {}
+  }
+};
+
+const cfgSave = () => {
+  if (window.cfgSaveFS) {
+    window.cfgSaveFS();
+  } else {
+    try { localStorage.setItem('gp_cfg', JSON.stringify(CFG)); } catch {}
+  }
+};
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const CFG_SK = 'gp_cfg';
 const CFG_DEF = {mlComision:14, costoEnvioMeli:0, iibbPct:0};
 let CFG = {...CFG_DEF};
+window.CFG = CFG;
 
 function cfgLoad() {
   try { const r = localStorage.getItem(CFG_SK); if(r) CFG = {...CFG_DEF, ...JSON.parse(r)}; } catch {}
+  window.CFG = CFG;
 }
-function cfgSave() { try { localStorage.setItem(CFG_SK, JSON.stringify(CFG)); } catch {} }
-
 // ─── TC AUTOMÁTICO (dolarapi.com) ─────────────────────────────────────────────
 let tcCache = null;
 async function fetchTC() {
@@ -1914,7 +2084,7 @@ function importDB(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const data = JSON.parse(ev.target.result);
       if (!confirm(`¿Importar backup del ${data.fecha||'?'}?\n\nEsto va a REEMPLAZAR todos los datos actuales.`)) return;
@@ -1924,10 +2094,12 @@ function importDB(e) {
       if (data.g) DB.g = data.g;
       if (data.u) DB.u = data.u;
       if (data.d) DB.d = data.d;
-      Object.keys(SK).forEach(k => dbSave(k));
+      // Sincronizar todo a Firestore
+      await Promise.all(Object.keys(SK).map(k => dbSave(k)));
       alert('✓ Datos importados correctamente');
       rview();
-    } catch {
+    } catch(err) {
+      console.error(err);
       alert('El archivo no es válido. Asegurate de usar un backup exportado desde esta app.');
     }
   };
@@ -1936,10 +2108,13 @@ function importDB(e) {
 }
 
 
-dbLoad();
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
 cfgLoad();
-rnav();
-rview();
+// Exponer para el módulo Firebase
+window.rnav  = rnav;
+window.rview = rview;
+// No llamamos dbLoad() ni rnav()/rview() acá — lo hace Firebase tras el login
 </script>
+</div><!-- fin app-screen -->
 </body>
 </html>
