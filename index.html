@@ -1611,7 +1611,7 @@ function vCaja() {
   const all = [
     ...DB.v.map(v => ({fecha:v.fecha, tipo:'i', con:`Venta${v.cliente?` — ${v.cliente}`:''}`, monto:v.total})),
     ...DB.l.map(l => ({fecha:l.fecha, tipo:'e', con:`Compra${l.proveedor?` — ${l.proveedor}`:''}`, monto:l.total})),
-    ...DB.g.map(g => ({fecha:g.fecha, tipo:'e', con:`${g.categoria}: ${g.descripcion}`, monto:g.monto})),
+    ...DB.g.map(g => ({fecha:g.fecha, tipo:g.categoria==='Tasa'?'i':'e', con:`${g.categoria}: ${g.descripcion}`, monto:g.monto})),
   ].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
 
   const saldo = all.reduce((s,m) => m.tipo==='i' ? s+m.monto : s-m.monto, 0);
