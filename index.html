@@ -2088,19 +2088,22 @@ function importDB(e) {
     try {
       const data = JSON.parse(ev.target.result);
       if (!confirm(`¿Importar backup del ${data.fecha||'?'}?\n\nEsto va a REEMPLAZAR todos los datos actuales.`)) return;
-      if (data.p) DB.p = data.p;
-      if (data.l) DB.l = data.l;
-      if (data.v) DB.v = data.v;
-      if (data.g) DB.g = data.g;
-      if (data.u) DB.u = data.u;
-      if (data.d) DB.d = data.d;
-      // Sincronizar todo a Firestore
-      await Promise.all(Object.keys(SK).map(k => dbSave(k)));
+      // Actualizar tanto DB local como window.DB
+      if (data.p) { DB.p = data.p; window.DB.p = data.p; }
+      if (data.l) { DB.l = data.l; window.DB.l = data.l; }
+      if (data.v) { DB.v = data.v; window.DB.v = data.v; }
+      if (data.g) { DB.g = data.g; window.DB.g = data.g; }
+      if (data.u) { DB.u = data.u; window.DB.u = data.u; }
+      if (data.d) { DB.d = data.d; window.DB.d = data.d; }
+      // Guardar en Firestore uno a uno para no saturar
+      for (const k of Object.keys(SK)) {
+        await dbSave(k);
+      }
       alert('✓ Datos importados correctamente');
       rview();
     } catch(err) {
-      console.error(err);
-      alert('El archivo no es válido. Asegurate de usar un backup exportado desde esta app.');
+      console.error('Error importando:', err);
+      alert('Error al importar: ' + err.message);
     }
   };
   reader.readAsText(file);
