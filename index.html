@@ -645,6 +645,7 @@ function dashFilter(arr, dk) {
 }
 
 function vDash() {
+  const now  = new Date();
   const sv   = DB.p.reduce((s,p) => { const st=stockProd(p); return s+st.stock*st.cp; }, 0);
   const low  = DB.p.map(p=>({...p,...stockProd(p)})).filter(x=>x.stock<=0||(stockMinSugerido(x)>0&&x.stock<=stockMinSugerido(x)));
   const fv   = dashFilter(DB.v, 'fecha');
