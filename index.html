@@ -555,6 +555,10 @@ window.cfgSaveFS = async () => {
     <nav id="nav"></nav>
     <div class="sidebar-footer">
       <div id="user-email" style="color:rgba(255,255,255,.5);font-size:11px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button onclick="meliSyncManual()" id="btn-meli-sync"
+        style="width:100%;padding:7px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:6px;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;margin-bottom:6px;text-align:left">
+        ⟳ Sincronizar con Meli
+      </button>
       <button onclick="doLogout()" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-size:12px;font-family:inherit;cursor:pointer;margin-bottom:6px;text-align:left">
         ⎋ Cerrar sesión
       </button>
@@ -2221,7 +2225,25 @@ function importDB(e) {
 }
 
 
-// ─── MOTOR DE FILTROS ESTILO EXCEL ───────────────────────────────────────────
+async function meliSyncManual() {
+  const btn = document.getElementById('btn-meli-sync');
+  if (btn) { btn.textContent = '⟳ Sincronizando...'; btn.disabled = true; }
+  try {
+    const r = await fetch('https://us-central1-tjtech-panel.cloudfunctions.net/meliSync');
+    const d = await r.json();
+    if (d.ok) {
+      alert(`✓ Sincronización completada.\n${d.nuevas > 0 ? `Se agregaron ${d.nuevas} venta(s) nueva(s).` : 'No hay ventas nuevas.'}`);
+    } else {
+      alert('Error al sincronizar: ' + (d.error || 'desconocido'));
+    }
+  } catch(e) {
+    alert('Error de conexión al sincronizar con Meli.');
+  } finally {
+    if (btn) { btn.textContent = '⟳ Sincronizar con Meli'; btn.disabled = false; }
+  }
+}
+
+
 const tableFilters = {}; // { tableId: { colIdx: { selected: Set, sort: 'asc'|'desc'|null } } }
 
 function initFilter(tableId) {
