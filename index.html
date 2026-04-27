@@ -694,7 +694,7 @@ function vDash() {
           <select style="padding:6px 10px;font-size:12px;border:1px solid ${dashPer==='anioSel'?'var(--brand)':'var(--border2)'};border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit;font-weight:${dashPer==='anioSel'?'600':'400'}"
             onchange="if(this.value){dashPer='anioSel';dashAnio=+this.value;rview();}else{dashPer='mes';dashAnio=0;rview();}">
             <option value="">Año específico…</option>
-            ${Array.from({length: now.getFullYear()-2025+1}, (_,i)=>2025+i).map(y=>`<option value="${y}"${dashPer==='anioSel'&&dashAnio===y?' selected':''}>${y}</option>`).join('')}
+            ${Array.from({length: new Date().getFullYear()-2025+1}, (_,i)=>2025+i).map(y=>`<option value="${y}"${dashPer==='anioSel'&&dashAnio===y?' selected':''}>${y}</option>`).join('')}
           </select>
         </div>
       </div>
