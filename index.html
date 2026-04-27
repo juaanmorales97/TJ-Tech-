@@ -622,10 +622,13 @@ function rview() {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-let dashPer = 'mes';
+let dashPer = 'mes', dashAnio = 0;
 
 function dashFilter(arr, dk) {
   const now = new Date();
+  if (dashPer === 'anioSel' && dashAnio) {
+    return arr.filter(x => new Date(x[dk]).getFullYear() === dashAnio);
+  }
   if (dashPer === 'semana') {
     const lun = new Date(now);
     lun.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1));
@@ -655,7 +658,7 @@ function vDash() {
   const neto    = ventas - cmv - gastos + tasa;
   const unidades = fv.reduce((s,v)=>s+(v.cantidad||1),0);
   const ticketProm = fv.length>0 ? ventas/fv.length : 0;
-  const perLbl  = {semana:'Esta semana', mes:'Este mes', anio:'Este año'}[dashPer];
+  const perLbl  = dashPer==='anioSel' ? `Año ${dashAnio}` : {semana:'Esta semana', mes:'Este mes', anio:'Este año'}[dashPer];
 
   const alertHtml = low.length ? `
     <div class="alert-strip">
@@ -683,9 +686,16 @@ function vDash() {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <span style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Resumen — ${perLbl}</span>
       <div style="display:flex;gap:6px">
-        ${[{v:'semana',l:'Semana'},{v:'mes',l:'Mes'},{v:'anio',l:'Año'}].map(o=>
-          `<button class="btn-seg${dashPer===o.v?' active':''}" onclick="dashPer='${o.v}';rview()">${o.l}</button>`
+        ${[{v:'semana',l:'Semana'},{v:'mes',l:'Mes'},{v:'anio',l:'Año actual'}].map(o=>
+          `<button class="btn-seg${dashPer===o.v?' active':''}" onclick="dashPer='${o.v}';dashAnio=0;rview()">${o.l}</button>`
         ).join('')}
+        <div style="margin-left:4px;padding-left:8px;border-left:1px solid var(--border)">
+          <select style="padding:6px 10px;font-size:12px;border:1px solid ${dashPer==='anioSel'?'var(--brand)':'var(--border2)'};border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);font-family:inherit;font-weight:${dashPer==='anioSel'?'600':'400'}"
+            onchange="if(this.value){dashPer='anioSel';dashAnio=+this.value;rview();}else{dashPer='mes';dashAnio=0;rview();}">
+            <option value="">Año específico…</option>
+            ${Array.from({length: now.getFullYear()-2025+1}, (_,i)=>2025+i).map(y=>`<option value="${y}"${dashPer==='anioSel'&&dashAnio===y?' selected':''}>${y}</option>`).join('')}
+          </select>
+        </div>
       </div>
     </div>
     <div class="metric-grid" style="margin-bottom:1.5rem">
