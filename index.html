@@ -88,11 +88,16 @@ async function initFirestore() {
     fsUnsubscribes.push(unsub);
   }
 
-  // Cargar config
+  // Cargar config y sincronizar con CFG local
   try {
     const cfgSnap = await getDoc(doc(db, 'tjtech', 'config'));
     if (cfgSnap.exists()) {
-      window.CFG = {...window.CFG, ...cfgSnap.data()};
+      const saved = cfgSnap.data();
+      window.CFG = {...window.CFG, ...saved};
+      // Sincronizar con el objeto CFG del script principal
+      Object.assign(window.CFG, saved);
+      // Notificar al script principal vía evento
+      window.dispatchEvent(new CustomEvent('cfg-loaded', {detail: saved}));
     }
   } catch {}
 
@@ -611,6 +616,8 @@ const dbSave = async k => {
 };
 
 const cfgSave = () => {
+  // Sincronizar CFG local con window.CFG
+  window.CFG = {...CFG};
   if (window.cfgSaveFS) {
     window.cfgSaveFS();
   } else {
@@ -1231,7 +1238,7 @@ function buildVentForm() {
         <input type="date" id="vf-fecha" value="${vF.fecha||hoy()}" oninput="vF.fecha=this.value">
       </div>
       <div class="field"><label>Nº Factura</label>
-        <input id="vf-fac" value="${vF.factura||''}" oninput="vF.factura=this.value" placeholder="Opcional">
+        <input id="vf-fac" value="${vF.factura||''}" oninput="vF.factura=this.value" placeholder="Sugerida automáticamente (Meli)">
       </div>
       <div class="field"><label>Producto *</label>
         <select id="vf-pid" onchange="vfSetProd(this.value)">
@@ -1259,12 +1266,12 @@ function buildVentForm() {
       <div class="field"><label>Comisión ML ($) <span style="font-size:10px;color:var(--text3)">auto · editable</span></label>
         <input type="number" id="vf-comml" value="${vF.comMLManual!=null?vF.comMLManual:calcVenta(vF).comML}" min="0"
           oninput="vF.comMLManual=+this.value;recalcVF()"
-          style="${vF.canal!=='Meli'?'opacity:.4;pointer-events:none':''}">
+          placeholder="${vF.canal==='Meli'?'Auto':'—'}">
       </div>
       <div class="field"><label>Costo Envío ($) <span style="font-size:10px;color:var(--text3)">auto · editable</span></label>
         <input type="number" id="vf-envio" value="${vF.envioManual!=null?vF.envioManual:calcVenta(vF).envio}" min="0"
           oninput="vF.envioManual=+this.value;recalcVF()"
-          style="${vF.canal!=='Meli'?'opacity:.4;pointer-events:none':''}">
+          placeholder="${vF.canal==='Meli'?'Auto':'—'}">
       </div>
       <div class="field"><label>IIBB ($)</label>
         <input type="number" id="vf-iibb" value="${vF.iibb||0}" min="0" oninput="vF.iibb=+this.value;recalcVF()">
@@ -1385,8 +1392,20 @@ function vVent() {
 
 async function oNewV() {
   const tc = await fetchTC();
+  // Sugerir próxima FC basada en la última venta Meli
+  const lastMeli = [...DB.v].reverse().find(v => v.canal === 'Meli' && v.factura);
+  let nextFC = '';
+  if (lastMeli && lastMeli.factura) {
+    const num = parseInt(lastMeli.factura.replace(/\D/g,''));
+    if (!isNaN(num)) {
+      // Mantener prefijo si lo hay (ej: "FC-001" → "FC-002")
+      const prefix = lastMeli.factura.replace(/\d+$/, '');
+      const digits = lastMeli.factura.match(/\d+$/)?.[0] || '';
+      nextFC = prefix + String(num + 1).padStart(digits.length, '0');
+    }
+  }
   vF = {
-    fecha:hoy(), factura:'', cliente:'', pid:'', canal:'Particular',
+    fecha:hoy(), factura:nextFC, cliente:'', pid:'', canal:'Particular',
     cantidad:1, precioVenta:0, costoU:0, iibb:0,
     comMLManual:null, envioManual:null,
     tc: tc||'', medioCobro:'Transferencia', estado:'cobrado'
@@ -2411,6 +2430,11 @@ function fth(label, tableId, colIdx) {
 
 
 cfgLoad();
+// Escuchar config cargada desde Firebase y sincronizar CFG local
+window.addEventListener('cfg-loaded', e => {
+  Object.assign(CFG, e.detail);
+  window.CFG = CFG;
+});
 // Exponer para el módulo Firebase
 window.rnav  = rnav;
 window.rview = rview;
