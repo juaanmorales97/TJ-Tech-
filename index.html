@@ -2451,8 +2451,27 @@ function fth(label, tableId, colIdx) {
 }
 
 
-cfgLoad();
-// Escuchar config cargada desde Firebase y sincronizar CFG local
+// ─── MELI OAUTH HANDLER ───────────────────────────────────────────────────────
+// Si la URL tiene ?code= es el callback de Meli
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    try {
+      const r = await fetch(`https://us-central1-tjtech-panel.cloudfunctions.net/meliCallback?code=${encodeURIComponent(code)}`);
+      const text = await r.text();
+      if (r.ok) {
+        // Limpiar el code de la URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        console.log('Meli autorizado correctamente');
+      }
+    } catch(e) {
+      console.error('Error procesando callback de Meli:', e);
+    }
+  }
+})();
+
+
 window.addEventListener('cfg-loaded', e => {
   Object.assign(CFG, e.detail);
   window.CFG = CFG;
