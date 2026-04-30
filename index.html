@@ -1147,7 +1147,7 @@ function refreshLotModal() {
 }
 
 function vLot() {
-  const rows = [...DB.l].reverse().map(l => {
+  const rows = [...DB.l].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(l => {
     const totUSD = (l.items||[]).reduce((s,i)=>s+(i.totalUSD||0),0);
     const totARS = (l.items||[]).reduce((s,i)=>s+(i.totalARS||0),0);
     const prods  = (l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return p?p.nombre:'?';}).join(', ');
@@ -1418,7 +1418,7 @@ function vfSetProd(pid) {
 
 function vVent() {
   const pend = DB.v.filter(v=>v.estado==='pendiente').reduce((s,v)=>s+(v.facturacion||v.total||0),0);
-  const rows = [...DB.v].reverse().map(v => {
+  const rows = [...DB.v].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(v => {
     const prod = DB.p.find(p=>p.id===v.pid);
     const nombre = prod ? prod.nombre : (v.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return p?p.nombre:'?';}).join(', ');
     const fact = v.facturacion ?? v.total ?? 0;
@@ -1645,7 +1645,7 @@ function calcDev(venta, motivo) {
 function vDev() {
   const total = DB.d.length;
   const porMotivo = DEV_MOTIVOS.reduce((o,m)=>{o[m]=DB.d.filter(d=>d.motivo===m).length;return o;},{});
-  const rows = [...DB.d].reverse().map(d => {
+  const rows = [...DB.d].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(d => {
     const venta = DB.v.find(v=>v.id===d.vid);
     const prod  = DB.p.find(p=>p.id===d.pid);
     const esProd = d.motivo==='Problema del producto';
@@ -1920,7 +1920,7 @@ function vGast() {
     const d=new Date(g.fecha);
     return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()&&g.categoria==='Tasa';
   }).reduce((s,g)=>s+g.monto,0);
-  const rows = [...DB.g].reverse().map(g => {
+  const rows = [...DB.g].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(g => {
     const esTasa = g.categoria==='Tasa';
     return `<tr>
       <td>${fmtD(g.fecha)}</td>
@@ -2302,7 +2302,7 @@ function vUsd() {
       <div class="metric-value ${v>=0?'blue':'red'}" style="font-size:18px">${fmtUSD(v)}</div>
     </div>`).join('');
 
-  const rows = [...DB.u].reverse().map(m => {
+  const rows = [...DB.u].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(m => {
     const esEntrada = ['Compra USD','Entrada (cobro)'].includes(m.tipo);
     return `<tr>
       <td>${fmtD(m.fecha)}</td>
