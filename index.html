@@ -849,9 +849,9 @@ function iChart() {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     const m = d.getMonth(), y = d.getFullYear();
-    const ing = DB.v.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0);
-    const eg  = DB.l.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0)
-              + DB.g.filter(x=>{const dd=new Date(x.fecha);return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.monto,0);
+    const ing = DB.v.filter(x=>{const dd=new Date(x.fecha+'T12:00');return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0);
+    const eg  = DB.l.filter(x=>{const dd=new Date(x.fecha+'T12:00');return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.total,0)
+              + DB.g.filter(x=>{const dd=new Date(x.fecha+'T12:00');return dd.getMonth()===m&&dd.getFullYear()===y;}).reduce((s,x)=>s+x.monto,0);
     md.push({mes: MN[m], ing, eg});
   }
   chart = new Chart(ctx, {
@@ -1913,11 +1913,11 @@ function dDev(id) {
 function vGast() {
   const now = new Date();
   const tm = DB.g.filter(g=>{
-    const d=new Date(g.fecha);
+    const d=new Date(g.fecha+'T12:00');
     return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()&&g.categoria!=='Tasa';
   }).reduce((s,g)=>s+g.monto,0);
   const tt = DB.g.filter(g=>{
-    const d=new Date(g.fecha);
+    const d=new Date(g.fecha+'T12:00');
     return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()&&g.categoria==='Tasa';
   }).reduce((s,g)=>s+g.monto,0);
   const rows = [...DB.g].sort((a,b)=>new Date(b.fecha+'T12:00')-new Date(a.fecha+'T12:00')).map(g => {
@@ -2013,8 +2013,9 @@ function vCaja() {
 
 // ─── RESULTADOS ───────────────────────────────────────────────────────────────
 function resMonthData(y, m) {
-  const fv = DB.v.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
-  const fg = DB.g.filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
+  const parseF = s => s ? new Date(s + 'T12:00') : null;
+  const fv = DB.v.filter(x=>{const d=parseF(x.fecha);return d&&d.getMonth()===m&&d.getFullYear()===y;});
+  const fg = DB.g.filter(x=>{const d=parseF(x.fecha);return d&&d.getMonth()===m&&d.getFullYear()===y;});
 
   // Ventas brutas (precio × cant) — nuevo formato; fallback a total para registros viejos
   const ventas    = fv.reduce((s,v)=>s+((v.precioVenta&&v.cantidad)?v.precioVenta*v.cantidad:(v.total||0)),0);
@@ -2037,7 +2038,7 @@ function resMonthData(y, m) {
   const totalDedVenta  = costoEnvio + comisionML + impuestos;
 
   // Devoluciones del período
-  const fd          = (DB.d||[]).filter(x=>{const d=new Date(x.fecha);return d.getMonth()===m&&d.getFullYear()===y;});
+  const fd          = (DB.d||[]).filter(x=>{const d=parseF(x.fecha);return d&&d.getMonth()===m&&d.getFullYear()===y;});
   const reintegros     = fd.reduce((s,d)=>s+(d.reintegro||0),0);
   const penalidades    = fd.reduce((s,d)=>s+(d.penalidad||0),0);
   const otrosGastosDev = fd.reduce((s,d)=>s+(d.otrosGastos||0),0);
