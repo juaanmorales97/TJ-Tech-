@@ -651,20 +651,47 @@ async function fetchTC() {
   } catch { return null; }
 }
 
-// ─── STOCK CALC ───────────────────────────────────────────────────────────────
+// ─── STOCK CALC (FIFO) ────────────────────────────────────────────────────────
 function stockProd(prod) {
-  const li  = DB.l.flatMap(l => l.items||[]).filter(i => i.pid === prod.id);
-  const vi  = DB.v.filter(v => v.pid === prod.id).map(v => ({qty: v.cantidad||0}))
-              .concat(DB.v.flatMap(v => (v.items||[]).filter(i=>i.pid===prod.id&&!v.pid)));
-  // devoluciones vuelven al stock
-  const di  = (DB.d||[]).filter(d => d.pid === prod.id).reduce((s,d)=>s+(d.cantidad||1),0);
-  const qty  = li.reduce((s,i) => s + i.qty, 0);
-  const cost = li.reduce((s,i) => s + i.qty * i.costo, 0);
-  const vendido = vi.reduce((s,i) => s + i.qty, 0);
-  return {
-    stock: qty - vendido + di,
-    cp: qty > 0 ? cost / qty : (prod.costoBase || 0)
-  };
+  // Lotes ordenados por fecha (más viejo primero = FIFO)
+  const lotItems = DB.l.flatMap(l =>
+    (l.items||[])
+      .filter(i => i.pid === prod.id)
+      .map(i => ({ qty: i.qty||0, costo: i.costo||0, fecha: l.fecha||'' }))
+  ).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+  // Total vendido (ventas directas + items de ventas multi-producto)
+  const vi = DB.v.filter(v => v.pid === prod.id).map(v => ({ qty: v.cantidad||0 }))
+    .concat(DB.v.flatMap(v => (v.items||[]).filter(i => i.pid === prod.id && !v.pid).map(i => ({ qty: i.qty||0 }))));
+  const di         = (DB.d||[]).filter(d => d.pid === prod.id).reduce((s,d) => s + (d.cantidad||1), 0);
+  const totalComp  = lotItems.reduce((s,i) => s + i.qty, 0);
+  const totalVend  = vi.reduce((s,i) => s + i.qty, 0) - di;
+  const stock      = totalComp - totalVend;
+
+  // FIFO: consumir desde el lote más viejo
+  let porConsumir    = Math.max(0, totalVend);
+  let costoRestante  = 0;
+  let unidRestantes  = 0;
+
+  for (const item of lotItems) {
+    if (porConsumir <= 0) {
+      // Lote con stock disponible completo
+      costoRestante += item.qty * item.costo;
+      unidRestantes += item.qty;
+    } else if (porConsumir < item.qty) {
+      // Lote con stock parcial
+      const disponible = item.qty - porConsumir;
+      costoRestante += disponible * item.costo;
+      unidRestantes += disponible;
+      porConsumir = 0;
+    } else {
+      // Lote agotado
+      porConsumir -= item.qty;
+    }
+  }
+
+  const cp = unidRestantes > 0 ? costoRestante / unidRestantes : (prod.costoBase || 0);
+  return { stock, cp };
 }
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
@@ -1354,7 +1381,12 @@ function vVent() {
       <td class="mono" style="font-size:12px;color:var(--text2)">${v.facturacionUSD?'USD '+v.facturacionUSD.toFixed(0):'—'}</td>
       <td class="mono" style="font-size:12px;color:var(--text2)">${v.gananciaUSD?'USD '+v.gananciaUSD.toFixed(0):'—'}</td>
       <td><span class="badge badge-${v.estado==='cobrado'?'green':'amber'}">${v.estado||'cobrado'}</span></td>
-      <td><button class="btn btn-sm btn-danger" onclick="dVent('${v.id}')">Eliminar</button></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="oEditV('${v.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="dVent('${v.id}')">Eliminar</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
   return `
@@ -1392,6 +1424,96 @@ function vVent() {
         </table>
       </div>
     </div>`;
+}
+
+function oEditV(id) {
+  const v = DB.v.find(x => x.id === id);
+  if (!v) return;
+  // Copiar venta al formulario de edición
+  vF = { ...v };
+  mOpen('Editar venta', buildEditVentForm(), `saveEditV('${id}')`);
+}
+
+function buildEditVentForm() {
+  const c = calcVenta(vF);
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="vf-fecha" value="${vF.fecha||''}" oninput="vF.fecha=this.value">
+      </div>
+      <div class="field"><label>Estado</label>
+        <select id="vf-est" onchange="vF.estado=this.value">
+          <option${vF.estado==='cobrado'?' selected':''}>cobrado</option>
+          <option${vF.estado==='pendiente'?' selected':''}>pendiente</option>
+        </select>
+      </div>
+      <div class="field"><label>Medio de cobro</label>
+        <select id="vf-mc" onchange="vF.medioCobro=this.value">
+          ${MEDIOS_COBRO.map(m=>`<option${vF.medioCobro===m?' selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>TC ($ por USD)</label>
+        <input type="number" id="vf-tc" value="${vF.tc||''}" min="0" placeholder="Tipo de cambio"
+          oninput="vF.tc=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>Costo unitario ($)</label>
+        <input type="number" id="vf-cu" value="${vF.costoU||''}" min="0" placeholder="Costo del producto"
+          oninput="vF.costoU=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>IIBB ($)</label>
+        <input type="number" id="vf-iibb" value="${vF.iibb||''}" min="0" placeholder="Impuesto IIBB"
+          oninput="vF.iibb=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>Com. ML ($)</label>
+        <input type="number" id="vf-comml" value="${vF.comMLManual??vF.comisionML??''}" min="0"
+          oninput="vF.comMLManual=+this.value;recalcVF()">
+      </div>
+      <div class="field"><label>C. Envío ($)</label>
+        <input type="number" id="vf-envio" value="${vF.envioManual??vF.costoEnvio??''}" min="0"
+          oninput="vF.envioManual=+this.value;recalcVF()">
+      </div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        ${[
+          ['Facturación','vf-fact', c.facturacion, ARS(c.facturacion)],
+          ['Margen Bruto','vf-mb', c.margenBruto, ARS(c.margenBruto)],
+          ['Fact. USD','vf-fusd', c.facturacionUSD, c.facturacionUSD?'USD '+c.facturacionUSD.toFixed(2):'—'],
+          ['Gan. USD','vf-gusd', c.gananciaUSD, c.gananciaUSD?'USD '+c.gananciaUSD.toFixed(2):'—'],
+        ].map(([lbl,id,val,fmt])=>`
+          <div>
+            <div style="font-size:11px;color:var(--text3);font-weight:500;margin-bottom:3px">${lbl}</div>
+            <input id="${id}" readonly value="${fmt}"
+              style="background:transparent;border:none;padding:4px 0;font-family:var(--font-mono);font-size:13px;font-weight:600;
+              ${id==='vf-mb'?(c.margenBruto>=0?'color:var(--green)':'color:var(--red)'):'color:var(--brand)'}">
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function saveEditV(id) {
+  const idx = DB.v.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const c = calcVenta(vF);
+  DB.v[idx] = {
+    ...DB.v[idx],
+    fecha:         vF.fecha,
+    estado:        vF.estado,
+    medioCobro:    vF.medioCobro,
+    tc:            vF.tc,
+    costoU:        vF.costoU,
+    iibb:          vF.iibb,
+    comMLManual:   vF.comMLManual,
+    envioManual:   vF.envioManual,
+    comisionML:    c.comML,
+    costoEnvio:    c.envio,
+    facturacion:   c.facturacion,
+    margenBruto:   c.margenBruto,
+    facturacionUSD: c.facturacionUSD,
+    gananciaUSD:   c.gananciaUSD,
+    total:         c.facturacion,
+  };
+  dbSave('v'); mClose(); rview();
 }
 
 async function oNewV() {
