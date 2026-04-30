@@ -733,20 +733,22 @@ let dashPer = 'mes', dashAnio = 0;
 
 function dashFilter(arr, dk) {
   const now = new Date();
+  // Usar T12:00 para evitar problemas de timezone (igual que fmtD)
+  const parseF = s => s ? new Date(s + 'T12:00') : null;
   if (dashPer === 'anioSel' && dashAnio) {
-    return arr.filter(x => new Date(x[dk]).getFullYear() === dashAnio);
+    return arr.filter(x => { const d=parseF(x[dk]); return d && d.getFullYear()===dashAnio; });
   }
   if (dashPer === 'semana') {
     const lun = new Date(now);
     lun.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1));
     lun.setHours(0,0,0,0);
-    return arr.filter(x => new Date(x[dk]) >= lun);
+    return arr.filter(x => { const d=parseF(x[dk]); return d && d >= lun; });
   }
   if (dashPer === 'mes') {
-    return arr.filter(x => { const d=new Date(x[dk]); return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
+    return arr.filter(x => { const d=parseF(x[dk]); return d && d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear(); });
   }
   if (dashPer === 'anio') {
-    return arr.filter(x => new Date(x[dk]).getFullYear()===now.getFullYear());
+    return arr.filter(x => { const d=parseF(x[dk]); return d && d.getFullYear()===now.getFullYear(); });
   }
   return arr;
 }
@@ -877,7 +879,7 @@ function iChart() {
 function stockMinSugerido(prod) {
   const ahora  = new Date();
   const desde  = new Date(ahora); desde.setDate(ahora.getDate() - 90);
-  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha)>=desde);
+  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha+'T12:00')>=desde);
   const unids  = ventas.reduce((s,v)=>s+(v.cantidad||1),0);
   const promDiario = unids / 90;
   return Math.ceil(promDiario * 45); // 45 días de cobertura
@@ -887,7 +889,7 @@ function stockMinSugerido(prod) {
 function diasStock(prod, stockActual) {
   const ahora = new Date();
   const desde = new Date(ahora); desde.setDate(ahora.getDate() - 90);
-  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha)>=desde);
+  const ventas = DB.v.filter(v => v.pid===prod.id && new Date(v.fecha+'T12:00')>=desde);
   const unids  = ventas.reduce((s,v)=>s+(v.cantidad||1),0);
   const promDiario = unids / 90;
   if (!promDiario) return null;
