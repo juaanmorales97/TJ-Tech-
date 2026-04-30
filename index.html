@@ -1161,7 +1161,12 @@ function vLot() {
       <td class="mono" style="font-weight:600">${ARS(totARS||l.total||0)}</td>
       <td class="mono" style="font-size:12px;color:var(--text2)">${l.tc?'$'+Number(l.tc).toLocaleString('es-AR'):'—'}</td>
       <td><span class="badge badge-${l.estado==='pagado'?'green':'amber'}">${l.estado}</span></td>
-      <td><button class="btn btn-sm btn-danger" onclick="dLot('${l.id}')">Eliminar</button></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="oEditL('${l.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="dLot('${l.id}')">Eliminar</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 
@@ -1216,6 +1221,59 @@ function saveLot() {
     proveedor:lF.prov, estado:lF.est, notas:lF.notas,
     tc:lF.tc, items:[...lI], total:totARS
   });
+  dbSave('l'); mClose(); rview();
+}
+
+function oEditL(id) {
+  const l = DB.l.find(x => x.id === id);
+  if (!l) return;
+  lF = { fecha: l.fecha, nro: l.nroLote||'', prov: l.proveedor||'', est: l.estado||'pagado', notas: l.notas||'', tc: l.tc||'' };
+  mOpen('Editar lote', buildEditLotForm(l), `saveEditL('${id}')`);
+}
+
+function buildEditLotForm(l) {
+  const totUSD = (l.items||[]).reduce((s,i)=>s+(i.totalUSD||0),0);
+  const totARS = (l.items||[]).reduce((s,i)=>s+(i.totalARS||0),0);
+  const prods  = (l.items||[]).map(i=>{const p=DB.p.find(x=>x.id===i.pid);return p?p.nombre:'?';}).join(', ');
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha *</label>
+        <input type="date" id="l-fecha" value="${lF.fecha||''}" oninput="lF.fecha=this.value">
+      </div>
+      <div class="field"><label>Nº Lote</label>
+        <input id="l-nro" value="${lF.nro||''}" oninput="lF.nro=this.value">
+      </div>
+      <div class="field"><label>Proveedor</label>
+        <input id="l-prov" value="${lF.prov||''}" oninput="lF.prov=this.value">
+      </div>
+      <div class="field"><label>Estado</label>
+        <select id="l-est" onchange="lF.est=this.value">
+          <option${lF.est==='pagado'?' selected':''}>pagado</option>
+          <option${lF.est==='pendiente'?' selected':''}>pendiente</option>
+        </select>
+      </div>
+      <div class="field span2"><label>Notas</label>
+        <input id="l-notas" value="${lF.notas||''}" oninput="lF.notas=this.value">
+      </div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;font-size:12px;color:var(--text2)">
+      <strong>Productos:</strong> ${prods} &nbsp;·&nbsp;
+      <strong>Total:</strong> USD ${totUSD.toFixed(2)} / ${ARS(totARS||l.total||0)}
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Los items del lote no se pueden editar desde aquí — eliminá y cargá un nuevo lote si necesitás cambiar los costos.</div>
+    </div>`;
+}
+
+function saveEditL(id) {
+  const idx = DB.l.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  DB.l[idx] = {
+    ...DB.l[idx],
+    fecha:    lF.fecha,
+    nroLote:  lF.nro || '',
+    proveedor: lF.prov || '',
+    estado:   lF.est,
+    notas:    lF.notas || '',
+  };
   dbSave('l'); mClose(); rview();
 }
 
