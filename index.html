@@ -1629,7 +1629,12 @@ function vDev() {
 
 function buscarVentaPorFC(nroFC) {
   if (!nroFC) return null;
-  return DB.v.find(v => v.factura && v.factura.toString().trim().toLowerCase() === nroFC.toString().trim().toLowerCase()) || null;
+  const q = nroFC.toString().trim().toLowerCase();
+  return DB.v.find(v =>
+    (v.factura && v.factura.toString().trim().toLowerCase() === q) ||
+    (v.meliOrderId && v.meliOrderId.toString().trim() === q) ||
+    (v.id && v.id.toString().trim().toLowerCase() === q)
+  ) || null;
 }
 
 function buildDevForm() {
@@ -1648,8 +1653,8 @@ function buildDevForm() {
           ${DEV_MOTIVOS.map(m=>`<option${devF.motivo===m?' selected':''}>` + '${' + 'm}' + `</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label>Nº de Factura (FC) *</label>
-        <input id="dev-fc" value="${devF.fcBuscar||''}" placeholder="Ingresá el Nº de FC"
+      <div class="field"><label>Nº de Venta / FC *</label>
+        <input id="dev-fc" value="${devF.fcBuscar||''}" placeholder="Nº de venta Meli, FC manual o ID"
           oninput="devF.fcBuscar=this.value" onblur="devBuscarFC()">
       </div>
       <div class="field"><label>NC aplicada</label>
@@ -1665,8 +1670,8 @@ function buildDevForm() {
       ${venta
         ? `✓ Venta encontrada: <strong>${prod?prod.nombre:'?'}</strong> — ${fmtD(venta.fecha)} — Cliente: ${venta.cliente||'—'} — ${ARS(venta.precioVenta*(venta.cantidad||1))}`
         : devF.fcBuscar
-          ? `✗ No se encontró ninguna venta con FC: <strong>${devF.fcBuscar}</strong>`
-          : 'Ingresá el Nº de FC para buscar la venta automáticamente'}
+          ? `✗ No se encontró ninguna venta con: <strong>${devF.fcBuscar}</strong>`
+          : 'Ingresá el Nº de venta Meli, FC manual o ID para buscar automáticamente'}
     </div>
     <div class="grid2">
       <div class="field"><label>Cantidad a devolver</label>
@@ -1740,7 +1745,7 @@ function oNewDev() {
 }
 
 function saveDev() {
-  if (!devF.vid) return alert('Ingresá el Nº de FC para buscar y asociar la venta original');
+  if (!devF.vid) return alert('Ingresá el Nº de venta, FC o ID para buscar y asociar la venta original');
   const venta = DB.v.find(v=>v.id===devF.vid);
   if (!venta) return alert('Venta no encontrada');
   const c = calcDev(venta, devF.motivo);
