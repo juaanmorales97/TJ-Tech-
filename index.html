@@ -1601,7 +1601,12 @@ function vDev() {
       <td class="mono" style="color:var(--red);font-size:12px">${d.penalidad?ARS(d.penalidad):'—'}</td>
       <td class="mono" style="color:var(--red);font-size:12px">${d.otrosGastos?ARS(d.otrosGastos):'—'}${d.otrosGastosDesc?`<br><span style="font-size:10px;color:var(--text3)">${d.otrosGastosDesc}</span>`:''}</td>
       <td style="font-size:12px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.notas||''}">${d.notas||'—'}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="dDev('${d.id}')">Eliminar</button></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="oEditDev('${d.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="dDev('${d.id}')">Eliminar</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 
@@ -1764,6 +1769,78 @@ function saveDev() {
     reintegro:  c.reintegro,
     penalidad:  c.penalidad,
   });
+  dbSave('d'); mClose(); rview();
+}
+
+function oEditDev(id) {
+  const d = DB.d.find(x => x.id === id);
+  if (!d) return;
+  devF = { ...d, fcBuscar: DB.v.find(v => v.id === d.vid)?.factura || '' };
+  mOpen('Editar devolución', buildEditDevForm(), `saveEditDev('${id}')`);
+}
+
+function buildEditDevForm() {
+  const venta = devF.vid ? DB.v.find(v => v.id === devF.vid) : null;
+  const prod  = venta ? DB.p.find(p => p.id === venta.pid) : null;
+  return `
+    <div class="grid2">
+      <div class="field"><label>Fecha de devolución</label>
+        <input type="date" id="dev-f" value="${devF.fecha||hoy()}" oninput="devF.fecha=this.value">
+      </div>
+      <div class="field"><label>Motivo</label>
+        <select id="dev-m" onchange="devF.motivo=this.value">
+          ${DEV_MOTIVOS.map(m=>`<option${devF.motivo===m?' selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Destino del stock</label>
+        <select id="dev-dest" onchange="devF.destino=this.value">
+          ${DEV_DESTINOS.map(d=>`<option${devF.destino===d?' selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>NC aplicada</label>
+        <input id="dev-nc" value="${devF.nc||''}" oninput="devF.nc=this.value" placeholder="Nº de Nota de Crédito (opcional)">
+      </div>
+      <div class="field"><label>Reintegro al cliente ($)</label>
+        <input type="number" id="dev-rei" value="${devF.reintegro||0}" min="0"
+          oninput="devF.reintegro=+this.value">
+      </div>
+      <div class="field"><label>Penalidad ($)</label>
+        <input type="number" id="dev-pen" value="${devF.penalidad||0}" min="0"
+          oninput="devF.penalidad=+this.value">
+      </div>
+      <div class="field"><label>Otros gastos ($)</label>
+        <input type="number" id="dev-og" value="${devF.otrosGastos||0}" min="0"
+          oninput="devF.otrosGastos=+this.value">
+      </div>
+      <div class="field"><label>Descripción otros gastos</label>
+        <input id="dev-ogd" value="${devF.otrosGastosDesc||''}" oninput="devF.otrosGastosDesc=this.value"
+          placeholder="Ej: flete extra, embalaje, etc.">
+      </div>
+      <div class="field span2"><label>Notas</label>
+        <input id="dev-n" value="${devF.notas||''}" oninput="devF.notas=this.value">
+      </div>
+    </div>
+    ${venta ? `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:4px;font-size:12px;color:var(--text2)">
+      ✓ Venta vinculada: <strong>${prod?prod.nombre:'?'}</strong> — ${fmtD(venta.fecha)} — ${venta.cliente||'—'}
+    </div>` : ''}`;
+}
+
+function saveEditDev(id) {
+  const idx = DB.d.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  DB.d[idx] = {
+    ...DB.d[idx],
+    fecha:           devF.fecha,
+    motivo:          devF.motivo,
+    destino:         devF.destino,
+    nc:              devF.nc || '',
+    reintegro:       +devF.reintegro || 0,
+    penalidad:       +devF.penalidad || 0,
+    otrosGastos:     +devF.otrosGastos || 0,
+    otrosGastosDesc: devF.otrosGastosDesc || '',
+    notas:           devF.notas || '',
+  };
   dbSave('d'); mClose(); rview();
 }
 
